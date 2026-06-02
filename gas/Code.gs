@@ -343,7 +343,7 @@ function prosesAPI(payload) {
           let tipe = data[i][2];
           let status = data[i][5];
           // Jangan reset status di getData. Reset hanya oleh trigger resetTugasBerulang saat periode berganti.
-          // Semua user PIC dapat melihat seluruh tugas. Hak update tetap dibatasi di updateStatus.
+          // Semua user PIC dapat melihat seluruh tugas. Hak update tetap dibatasi pada action updateStatus.
           tasksRaw.push(data[i]);
         }
       });
@@ -644,7 +644,6 @@ function resetTugasBerulang() {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const kategori = ["Harian", "Mingguan", "Bulanan"];
   const now = new Date();
-  const todayYmd = Utilities.formatDate(now, APP_TZ, "yyyy-MM-dd");
   const yesterday = new Date(now);
   yesterday.setDate(yesterday.getDate() - 1);
   const yestDay = parseInt(Utilities.formatDate(yesterday, APP_TZ, "u")) % 7;
@@ -666,8 +665,6 @@ function resetTugasBerulang() {
       if (reset) sh.getRange(i + 1, 6).setValue("Belum");
     }
   });
-  cleanupCompletedTambahan_(ss, todayYmd);
-  SpreadsheetApp.flush();
 }
 
 function prosesReminder() {

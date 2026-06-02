@@ -1,43 +1,9 @@
-# SIBACOT GitHub Pages + PWA + Google Apps Script
+# SIBACOT GitHub Pages + PWA
 
-Paket ini membuat aplikasi bisa dibuka dari dua alamat:
+Hotfix ini memperbaiki tampilan GitHub Pages yang terbaca desktop mode dengan menambahkan viewport langsung di `docs/index.html`, serta memperbaiki logout logo kanan atas dengan `onclick="handleLogoTap()"` langsung pada elemen logo.
 
-1. Alamat Google Apps Script Web App, memakai `google.script.run`.
-2. Alamat GitHub Pages, sebagai frontend/PWA yang memanggil GAS melalui `fetch()`.
-
-## Struktur
-
-```text
-sibacot-github-pwa/
-├─ gas/Code.gs
-└─ docs/
-   ├─ index.html
-   ├─ config.js
-   ├─ manifest.webmanifest
-   ├─ sw.js
-   ├─ offline.html
-   └─ icons/
-```
-
-## Setup GAS
-
-1. Paste `gas/Code.gs` ke Apps Script.
-2. Jalankan `setupTemplate()`.
-3. Deploy sebagai Web App.
-4. Copy URL `/exec`.
-
-## Setup GitHub Pages
-
-1. Buka `docs/config.js`.
-2. Ganti `PASTE_URL_WEB_APP_GAS_DI_SINI` dengan URL Web App GAS.
-3. Upload repo ke GitHub.
-4. Settings > Pages > Source: branch `main`, folder `/docs`.
-5. Buka URL GitHub Pages.
-
-## PWA
-
-Jika browser mendukung, tombol **Install** muncul di header. Jika tidak muncul, gunakan menu browser: Install App/Add to Home Screen.
-
-## Catatan CORS
-
-Request GitHub ke GAS memakai `Content-Type: text/plain;charset=utf-8` dan `redirect: follow` agar menghindari preflight CORS.
+## Cara update
+1. Upload/replace isi folder `docs` ke repo GitHub Bapak.
+2. Paste `gas/Code.gs` ke Apps Script jika ingin sinkron dengan versi backend terbaru.
+3. Pastikan `docs/config.js` berisi URL Web App GAS.
+4. Jika tampilan masih lama, buka browser incognito atau clear site data/service worker, karena PWA bisa menyimpan cache lama.

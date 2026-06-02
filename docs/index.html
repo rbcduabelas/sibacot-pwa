@@ -2,6 +2,7 @@
 <html lang="id">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Aplikasi Tugas</title>
   <meta name="theme-color" content="#011F7B">
   <meta name="mobile-web-app-capable" content="yes">
@@ -264,6 +265,17 @@
     }
 
     #installAppBtn { display:none; background:var(--corp-gold); color:var(--corp-blue); padding:6px 10px; border-radius:18px; font-size:11px; text-transform:none; letter-spacing:0; white-space:nowrap; }
+
+    @media(max-width: 520px) {
+      .ent-header { padding: 8px 12px; gap: 8px; }
+      .header-left h1 { font-size: 16px; max-width: 52vw; }
+      .header-right { gap: 6px; }
+      #installAppBtn { padding: 5px 8px; font-size: 10px; }
+      #notifBadgeBtn { font-size: 20px; padding: 2px; }
+      .header-right img { max-height: 32px; }
+      .container { padding: 10px; padding-bottom: 85px; }
+      .welcome-bar { top: 53px; }
+    }
 
     #notifBadgeBtn {
       position: relative;
@@ -532,7 +544,7 @@
       <div class="header-right">
         <button id="installAppBtn" type="button" onclick="installPWA()">Install</button>
         <button id="notifBadgeBtn" onclick="toggleNotifPanel()" title="Pengingat Tugas">🔔<span id="notifBadgeCount">0</span></button>
-        <img id="headerAppLogo" src="https://upload.wikimedia.org/wikipedia/commons/a/a2/Logo_of_Bank_Mandiri.svg" alt="Logo" title="Ketuk 2x untuk logout" onerror="this.src='https://upload.wikimedia.org/wikipedia/commons/a/a2/Logo_of_Bank_Mandiri.svg'">
+        <img id="headerAppLogo" onclick="handleLogoTap()" src="https://upload.wikimedia.org/wikipedia/commons/a/a2/Logo_of_Bank_Mandiri.svg" alt="Logo" title="Ketuk 2x untuk logout" onerror="this.src='https://upload.wikimedia.org/wikipedia/commons/a/a2/Logo_of_Bank_Mandiri.svg'">
       </div>
     </header>
 
@@ -935,16 +947,9 @@
 
     function callAPI(payload) {
       return new Promise((resolve, reject) => {
-        if (globalUser) {
-          payload.sessionUsername = globalUser.username;
-          if (!payload.username) payload.username = globalUser.username;
-        } else {
-          payload.username = payload.username || "guest";
-        }
-        const timeoutId = setTimeout(() => {
-          showToast("Koneksi Server Timeout. Pastikan Otorisasi di Apps Script disetujui.");
-          reject(new Error("Timeout"));
-        }, 30000);
+        if (globalUser) { payload.sessionUsername = globalUser.username; if (!payload.username) payload.username = globalUser.username; }
+        else { payload.username = payload.username || "guest"; }
+        const timeoutId = setTimeout(() => { showToast("Koneksi Server Timeout. Pastikan Otorisasi di Apps Script disetujui."); reject(new Error("Timeout")); }, 30000);
         if (typeof google !== 'undefined' && google.script && google.script.run) {
           google.script.run
             .withSuccessHandler((res) => { clearTimeout(timeoutId); if (res && res.status === "error") showToast(res.message || "Terjadi kesalahan."); resolve(res); })
@@ -953,12 +958,7 @@
           return;
         }
         const apiUrl = (window.SIBACOT_CONFIG && window.SIBACOT_CONFIG.API_URL) || "";
-        if (!apiUrl || apiUrl.includes("PASTE_URL_WEB_APP_GAS_DI_SINI")) {
-          clearTimeout(timeoutId);
-          showToast("API GAS belum diatur. Isi URL Web App di config.js.");
-          reject(new Error("API_URL kosong"));
-          return;
-        }
+        if (!apiUrl || apiUrl.includes("PASTE_URL_WEB_APP_GAS_DI_SINI")) { clearTimeout(timeoutId); showToast("API GAS belum diatur. Isi URL Web App di config.js."); reject(new Error("API_URL kosong")); return; }
         fetch(apiUrl, { method:"POST", redirect:"follow", headers:{"Content-Type":"text/plain;charset=utf-8"}, body:JSON.stringify(payload) })
           .then(r => r.text())
           .then(txt => { clearTimeout(timeoutId); let res = JSON.parse(txt); if (res && res.status === "error") showToast(res.message || "Terjadi kesalahan."); resolve(res); })
@@ -1624,24 +1624,17 @@
 
     let deferredInstallPrompt = null;
     window.addEventListener('beforeinstallprompt', (event) => {
-      event.preventDefault();
-      deferredInstallPrompt = event;
-      const btn = document.getElementById('installAppBtn');
-      if (btn) btn.style.display = 'inline-block';
+      event.preventDefault(); deferredInstallPrompt = event;
+      const btn = document.getElementById('installAppBtn'); if (btn) btn.style.display = 'inline-block';
     });
     async function installPWA() {
       const btn = document.getElementById('installAppBtn');
       if (!deferredInstallPrompt) { showToast('Jika tombol install belum muncul, gunakan menu browser: Add to Home Screen / Install App.'); return; }
-      deferredInstallPrompt.prompt();
-      const choice = await deferredInstallPrompt.userChoice;
-      deferredInstallPrompt = null;
-      if (btn) btn.style.display = 'none';
-      if (choice && choice.outcome === 'accepted') showToast('Aplikasi berhasil dipasang.');
+      deferredInstallPrompt.prompt(); const choice = await deferredInstallPrompt.userChoice; deferredInstallPrompt = null;
+      if (btn) btn.style.display = 'none'; if (choice && choice.outcome === 'accepted') showToast('Aplikasi berhasil dipasang.');
     }
     window.addEventListener('appinstalled', () => { const btn = document.getElementById('installAppBtn'); if (btn) btn.style.display = 'none'; deferredInstallPrompt = null; });
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(err => console.warn('Service worker gagal:', err)));
-    }
+    if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(err => console.warn('Service worker gagal:', err)));
 
   </script>
 </body>
