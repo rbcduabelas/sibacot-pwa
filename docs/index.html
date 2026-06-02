@@ -1,0 +1,1648 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <title>Aplikasi Tugas</title>
+  <meta name="theme-color" content="#011F7B">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="SIBACOT">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <style>
+    :root {
+      --corp-blue: #011F7B;
+      --corp-blue-light: #033CBB;
+      --corp-gold: #FFBA09;
+      --corp-gold-light: #FFE299;
+      --bg-light: #F0F4F8;
+      --surface: #FFFFFF;
+      --text-main: #333333;
+      --text-muted: #666666;
+      --border: #E0E6ED;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+    }
+
+    body {
+      background-color: var(--bg-light);
+      color: var(--text-main);
+      line-height: 1.5;
+      font-size: 13px;
+    }
+
+    .flex-center {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 15px;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 15px;
+      padding-bottom: 90px;
+    }
+
+    .login-card {
+      width: 100%;
+      max-width: 380px;
+      background: var(--surface);
+      border-radius: 16px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+      overflow: hidden;
+    }
+
+    .login-header {
+      background: var(--corp-blue);
+      padding: 40px 20px 25px 20px;
+      text-align: center;
+    }
+
+    .login-header img {
+      max-width: 120px;
+      height: auto;
+      max-height: 90px;
+      margin-bottom: 12px;
+      object-fit: contain;
+    }
+
+    .login-header h2 {
+      margin: 0 0 5px 0;
+      font-size: 24px;
+      font-weight: 800;
+    }
+
+    .login-header p {
+      color: #A0B2D9;
+      font-size: 13px;
+      margin: 0;
+    }
+
+    .login-body {
+      padding: 30px 25px;
+      background: var(--surface);
+    }
+
+    .sibacot-si { color: #FFFFFF; }
+    .sibacot-bacot { color: var(--corp-gold); }
+
+    .input-group {
+      margin-bottom: 14px;
+      width: 100%;
+    }
+
+    .input-group label {
+      display: block;
+      font-size: 12px;
+      font-weight: bold;
+      color: var(--text-muted);
+      margin-bottom: 5px;
+    }
+
+    .input-with-icon {
+      display: flex;
+      align-items: center;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+      background: #FFFFFF;
+      margin-bottom: 20px;
+      transition: 0.2s;
+    }
+
+    .input-with-icon:focus-within {
+      border-color: var(--corp-gold);
+      box-shadow: 0 0 0 2px rgba(255, 186, 9, 0.2);
+    }
+
+    .input-with-icon .icon-box {
+      padding: 12px 14px;
+      background: #FAFAFA;
+      border-right: 1px solid var(--border);
+      color: #666;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .input-with-icon input {
+      border: none;
+      flex: 1;
+      padding: 12px 15px;
+      font-size: 15px;
+      background: transparent;
+      outline: none;
+      color: #333;
+      width: 100%;
+    }
+
+    .input-group input:not(.input-with-icon input),
+    .input-group select {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 13px;
+      background: #FAFAFA;
+      transition: 0.2s;
+    }
+
+    .input-group input:focus:not(.input-with-icon input),
+    .input-group select:focus {
+      border-color: var(--corp-gold);
+      outline: none;
+      background: var(--surface);
+      box-shadow: 0 0 0 2px rgba(255, 186, 9, 0.2);
+    }
+
+    button {
+      padding: 10px 15px;
+      border: none;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: bold;
+      cursor: pointer;
+      transition: 0.2s;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .btn-login-custom {
+      width: 100%;
+      padding: 14px;
+      background: var(--corp-gold);
+      color: var(--corp-blue);
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 800;
+      cursor: pointer;
+      transition: 0.2s;
+      margin-top: 10px;
+    }
+
+    .btn-primary { background: var(--corp-blue); color: var(--surface); }
+    .btn-primary:hover { background: var(--corp-blue-light); }
+    .btn-accent { background: var(--corp-gold); color: var(--corp-blue); }
+    .btn-secondary { background: #E0E6ED; color: var(--text-main); }
+    .btn-danger { background: #FFEBEB; color: #D32F2F; }
+    .btn-success { background: #E8F5E9; color: #2E7D32; }
+    .block { width: 100%; padding: 12px; }
+
+    .fab-btn {
+      position: fixed;
+      bottom: 25px;
+      right: 25px;
+      width: 55px;
+      height: 55px;
+      border-radius: 50%;
+      background: var(--corp-gold);
+      color: var(--corp-blue);
+      font-size: 28px;
+      font-weight: bold;
+      box-shadow: 0 4px 15px rgba(255, 186, 9, 0.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 90;
+      padding: 0;
+    }
+
+    .ent-header {
+      background: var(--corp-blue);
+      border-bottom: 4px solid var(--corp-gold);
+      padding: 10px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      color: var(--surface);
+      box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      gap: 15px;
+    }
+
+    .header-left { flex: 1; min-width: 0; }
+    .header-left h1 {
+      font-size: clamp(15px, 4vw, 22px);
+      font-weight: 800;
+      margin: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      letter-spacing: 0.5px;
+    }
+
+    .header-right {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .header-right img {
+      max-height: clamp(30px, 6vw, 45px);
+      width: auto;
+      object-fit: contain;
+      cursor: pointer;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    #installAppBtn { display:none; background:var(--corp-gold); color:var(--corp-blue); padding:6px 10px; border-radius:18px; font-size:11px; text-transform:none; letter-spacing:0; white-space:nowrap; }
+
+    #notifBadgeBtn {
+      position: relative;
+      background: transparent;
+      border: none;
+      color: #fff;
+      font-size: 22px;
+      cursor: pointer;
+      padding: 4px;
+      display: none;
+      text-transform: none;
+      letter-spacing: 0;
+    }
+
+    #notifBadgeCount {
+      position: absolute;
+      top: 0;
+      right: 0;
+      background: #E53935;
+      color: #fff;
+      border-radius: 50%;
+      font-size: 10px;
+      font-weight: bold;
+      width: 16px;
+      height: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #notifPanel {
+      display: none;
+      position: fixed;
+      top: 65px;
+      right: 10px;
+      z-index: 9990;
+      background: var(--surface);
+      border-radius: 10px;
+      box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+      border: 1px solid var(--border);
+      width: 300px;
+      max-width: 95vw;
+    }
+
+    #notifPanel .notif-panel-header {
+      background: var(--corp-blue);
+      color: #fff;
+      padding: 10px 15px;
+      border-radius: 10px 10px 0 0;
+      font-weight: bold;
+      font-size: 13px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    #notifPanel .notif-panel-header button {
+      background: transparent;
+      color: #fff;
+      font-size: 18px;
+      padding: 0 5px;
+      text-transform: none;
+      letter-spacing: 0;
+    }
+
+    #notifPanelList { max-height: 300px; overflow-y: auto; }
+
+    .notif-item {
+      padding: 10px 15px;
+      border-bottom: 1px solid var(--border);
+      font-size: 12px;
+      display: flex;
+      gap: 8px;
+      align-items: flex-start;
+    }
+
+    .notif-item .notif-icon { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+    .notif-item .notif-body strong { display: block; color: var(--corp-blue); margin-bottom: 2px; font-size: 12px; }
+    .notif-item .notif-body span { color: var(--text-muted); }
+    .notif-item.overdue { background: #FFF5F5; }
+    .notif-item.deadline-today { background: #FFFDE7; }
+    .notif-item.upcoming { background: #F1F8E9; }
+    #notifPanelEmpty { padding: 20px; text-align: center; color: var(--text-muted); font-size: 12px; }
+
+    .welcome-bar {
+      position: sticky;
+      top: 61px;
+      z-index: 40;
+      background: var(--surface);
+      padding: 12px 15px;
+      border-radius: 8px;
+      margin-bottom: 15px;
+      font-weight: 600;
+      border-left: 4px solid var(--corp-gold);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 13px;
+    }
+
+    .grid-layout { display: grid; grid-template-columns: 1fr; gap: 15px; }
+
+    .card {
+      background: var(--surface);
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+      padding: 15px;
+      border: 1px solid var(--border);
+      overflow: hidden;
+    }
+
+    .card-title {
+      font-size: 14px;
+      color: var(--corp-blue);
+      border-bottom: 2px solid var(--corp-gold);
+      padding-bottom: 8px;
+      margin-bottom: 12px;
+      text-transform: uppercase;
+      font-weight: 800;
+    }
+
+    .table-wrap { width: 100%; overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; table-layout: auto; }
+    th, td { padding: 10px 8px; text-align: left; border-bottom: 1px solid var(--border); word-wrap: break-word; }
+    th { background-color: var(--corp-gold); color: var(--corp-blue); font-size: 11px; text-transform: uppercase; white-space: nowrap; font-weight: 800; }
+    tr:hover td { background: var(--corp-gold-light); }
+    .td-center { text-align: center; }
+    .selesai { opacity: 0.5; background: #FAFAFA; }
+    .selesai .desc-text { text-decoration: line-through; color: #888; }
+    .desc-text { font-weight: bold; color: var(--corp-blue); cursor: pointer; min-width: 120px; }
+    .desc-text:hover { color: var(--corp-gold); text-decoration: underline; }
+    .edit-icon { font-size: 10px; opacity: 0.6; margin-left: 3px; }
+    input[type="checkbox"] { width: 20px; height: 20px; accent-color: var(--corp-gold); cursor: pointer; margin: 0; border-radius: 4px; }
+    .empty-state { text-align: center; color: #999; font-style: italic; padding: 15px; font-size: 12px; }
+
+    .thumb-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin-top: 15px; }
+    @media(min-width: 600px) { .thumb-grid { grid-template-columns: repeat(3, 1fr); } }
+    .thumb-card { background: var(--surface); padding: 25px 10px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); text-align: center; cursor: pointer; border: 1px solid var(--border); transition: 0.3s; }
+    .thumb-card:hover { transform: translateY(-3px); background: var(--corp-gold); border-color: var(--corp-gold); }
+    .thumb-icon { font-size: 30px; margin-bottom: 10px; }
+    .thumb-title { font-size: 13px; font-weight: bold; color: var(--corp-blue); transition: 0.3s; }
+    .admin-section { display: none; margin-top: 15px; }
+    .btn-back { margin-bottom: 15px; }
+    .form-row { display: flex; gap: 10px; }
+    .form-row .input-group { flex: 1; }
+    @media(max-width: 520px) { .form-row { flex-direction: column; gap: 0; } }
+
+    .cal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; gap: 8px; }
+    .cal-header h3 { color: var(--corp-blue); margin: 0; font-weight: 800; text-align: center; }
+    .cal-nav { background: var(--bg-light); color: var(--corp-blue); padding: 8px 12px; border: 1px solid var(--border); text-transform: none; letter-spacing: 0; }
+    .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; text-align: center; }
+    .cal-day-name { font-weight: 800; color: var(--text-muted); font-size: 12px; padding: 10px 0; }
+    .cal-day { background: var(--bg-light); padding: 15px 0; border-radius: 6px; cursor: pointer; font-size: 14px; border: 2px solid transparent; transition: 0.2s; font-weight: 600; color: var(--corp-blue); min-height: 56px; }
+    .cal-day:hover:not(.empty) { border-color: var(--corp-gold); background: var(--corp-gold-light); }
+    .cal-day.empty { background: transparent; cursor: default; }
+    .cal-day.is-holiday { background: #FFEBEB; color: #D32F2F; border-color: #D32F2F; }
+    .cal-day.is-holiday::after { content: '🏖️'; display: block; font-size: 10px; margin-top: 2px; }
+
+    .stat-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 15px; }
+    @media(min-width: 500px) { .stat-grid { grid-template-columns: repeat(4, 1fr); } }
+    .stat-card { background: var(--surface); border-radius: 10px; padding: 14px 12px; text-align: center; border: 2px solid var(--border); transition: 0.2s; cursor: pointer; }
+    .stat-card:hover, .stat-card.active { border-color: var(--corp-gold); background: var(--corp-gold); }
+    .stat-num { font-size: 28px; font-weight: 900; color: var(--corp-blue); line-height: 1; }
+    .stat-label { font-size: 11px; color: var(--text-muted); font-weight: 600; margin-top: 4px; text-transform: uppercase; }
+    .stat-icon { font-size: 18px; margin-bottom: 4px; }
+    .filter-bar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 15px; }
+    .filter-pill { padding: 6px 14px; border-radius: 20px; border: 2px solid var(--border); background: var(--surface); color: var(--text-muted); font-size: 12px; font-weight: bold; cursor: pointer; transition: 0.2s; text-transform: none; letter-spacing: 0; }
+    .filter-pill:hover, .filter-pill.active { background: var(--corp-blue); border-color: var(--corp-blue); color: #fff; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 10px; font-weight: bold; text-transform: uppercase; }
+    .badge-harian { background: #E3F2FD; color: #1565C0; }
+    .badge-mingguan { background: #F3E5F5; color: #6A1B9A; }
+    .badge-bulanan { background: #E8F5E9; color: #2E7D32; }
+    .badge-tambahan { background: #FFF3E0; color: #E65100; }
+    .pic-stat-list { display: flex; flex-direction: column; gap: 10px; }
+    .pic-stat-item { background: var(--bg-light); border-radius: 8px; padding: 10px 14px; }
+    .pic-stat-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; gap: 8px; }
+    .pic-stat-name { font-weight: 700; font-size: 13px; color: var(--corp-blue); }
+    .pic-stat-count { font-size: 12px; color: var(--text-muted); text-align: right; }
+    .progress-bar-wrap { background: var(--border); border-radius: 20px; height: 8px; overflow: hidden; }
+    .progress-bar-fill { height: 100%; border-radius: 20px; background: linear-gradient(90deg, var(--corp-blue), var(--corp-blue-light)); transition: width 0.5s ease; }
+
+    .toast { visibility: hidden; min-width: 250px; margin-left: -125px; background-color: var(--corp-blue); color: var(--surface); text-align: center; border-radius: 20px; padding: 12px 20px; position: fixed; z-index: 99999; left: 50%; bottom: 30px; font-size: 13px; font-weight: bold; box-shadow: 0 4px 12px rgba(0,0,0,0.2); border: 2px solid var(--corp-gold); }
+    .toast.show { visibility: visible; animation: fadein 0.3s, fadeout 0.3s 2.7s; }
+    @keyframes fadein { from {bottom: 0; opacity: 0;} to {bottom: 30px; opacity: 1;} }
+    @keyframes fadeout { from {bottom: 30px; opacity: 1;} to {bottom: 0; opacity: 0;} }
+    .modal { display: none; position: fixed; z-index: 9999; left: 0; top: 0; width: 100%; height: 100%; background: rgba(1,31,123,0.7); align-items: center; justify-content: center; padding: 15px; }
+    .modal-box { background: var(--surface); border-radius: 12px; border-top: 5px solid var(--corp-gold); max-height: 90vh; overflow-y: auto; width: 100%; max-width: 400px; padding: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+    .form-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+    #confirmModal { z-index: 99998; }
+    #confirmModal .modal-box { max-width: 320px; text-align: center; padding: 30px 25px; }
+    #confirmModal .confirm-icon { font-size: 36px; margin-bottom: 12px; }
+    #confirmModal .confirm-msg { font-size: 15px; color: var(--text-main); margin-bottom: 20px; line-height: 1.5; }
+    #confirmModal .confirm-actions { display: flex; gap: 10px; justify-content: center; }
+    #confirmModal .confirm-actions button { min-width: 90px; padding: 10px 20px; text-transform: none; letter-spacing: 0; font-size: 14px; }
+    #inactivityBar { display: none; position: fixed; bottom: 0; left: 0; right: 0; background: #FFF3CD; color: #856404; font-size: 12px; font-weight: bold; padding: 8px 15px; text-align: center; z-index: 9998; border-top: 2px solid var(--corp-gold); }
+    #notifBanner { display: none; background: var(--corp-blue); color: #fff; padding: 10px 15px; text-align: center; font-size: 12px; gap: 10px; align-items: center; justify-content: center; flex-wrap: wrap; }
+    #notifBanner button { background: var(--corp-gold); color: var(--corp-blue); padding: 5px 14px; font-size: 12px; border-radius: 20px; text-transform: none; letter-spacing: 0; font-weight: bold; }
+    #notifBanner .notif-dismiss { background: transparent; color: #aaa; padding: 5px 8px; font-size: 18px; line-height: 1; }
+    hr { border: none; border-top: 1px solid var(--border); margin: 15px 0; }
+  </style>
+</head>
+<body>
+  <div id="toast" class="toast">Notifikasi</div>
+  <div id="inactivityBar">⏱️ Sesi akan berakhir dalam <span id="countdownText">60</span> detik karena tidak ada aktivitas.</div>
+
+  <div id="notifBanner">
+    <span>🔔 Aktifkan notifikasi browser untuk mendapat pengingat tugas secara real-time</span>
+    <button onclick="mintaIzinNotifikasi()">Aktifkan</button>
+    <button class="notif-dismiss" onclick="tutupNotifBanner()" title="Tutup">✕</button>
+  </div>
+
+  <div id="confirmModal" class="modal">
+    <div class="modal-box">
+      <div class="confirm-icon" id="confirmIcon">❓</div>
+      <div class="confirm-msg" id="confirmMsg">Apakah Anda yakin?</div>
+      <div class="confirm-actions">
+        <button class="btn-secondary" id="confirmBtnBatal">Batal</button>
+        <button class="btn-primary" id="confirmBtnOke">Oke</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="notifPanel">
+    <div class="notif-panel-header">
+      <span>🔔 Pengingat Tugas</span>
+      <button onclick="toggleNotifPanel()">✕</button>
+    </div>
+    <div id="notifPanelList">
+      <div id="notifPanelEmpty">Tidak ada pengingat tugas saat ini.</div>
+    </div>
+  </div>
+
+  <div id="loginSection" class="screen flex-center">
+    <div class="login-card">
+      <div class="login-header">
+        <img id="loginAppLogo" src="https://upload.wikimedia.org/wikipedia/commons/a/a2/Logo_of_Bank_Mandiri.svg" alt="Logo" onerror="this.src='https://upload.wikimedia.org/wikipedia/commons/a/a2/Logo_of_Bank_Mandiri.svg'">
+        <h2 id="loginAppName"><span class="sibacot-si">SI</span><span class="sibacot-bacot">BACOT</span></h2>
+        <p id="loginAppDesc"></p>
+      </div>
+      <div class="login-body">
+        <div id="loginFormBox">
+          <div class="input-group">
+            <label>NIP / ID Pengguna</label>
+            <div class="input-with-icon">
+              <div class="icon-box">👤</div>
+              <input type="text" id="inUser" placeholder="Masukkan NIP" onkeypress="handleEnter(event)">
+            </div>
+          </div>
+          <div class="input-group">
+            <label>Kata Sandi</label>
+            <div class="input-with-icon">
+              <div class="icon-box">🔒</div>
+              <input type="password" id="inPass" placeholder="Password" onkeypress="handleEnter(event)">
+            </div>
+          </div>
+          <button type="button" id="btnLogin" class="btn-login-custom" onclick="doLogin()">LOGIN</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="appSection" class="screen" style="display:none;">
+    <header class="ent-header">
+      <div class="header-left"><h1 id="headerAppName"><span class="sibacot-si">SI</span><span class="sibacot-bacot">BACOT</span></h1></div>
+      <div class="header-right">
+        <button id="installAppBtn" type="button" onclick="installPWA()">Install</button>
+        <button id="notifBadgeBtn" onclick="toggleNotifPanel()" title="Pengingat Tugas">🔔<span id="notifBadgeCount">0</span></button>
+        <img id="headerAppLogo" src="https://upload.wikimedia.org/wikipedia/commons/a/a2/Logo_of_Bank_Mandiri.svg" alt="Logo" title="Ketuk 2x untuk logout" onerror="this.src='https://upload.wikimedia.org/wikipedia/commons/a/a2/Logo_of_Bank_Mandiri.svg'">
+      </div>
+    </header>
+
+    <main class="container">
+      <div class="welcome-bar"><span id="welcomeMsg"></span></div>
+      <button class="fab-btn" id="fabAdd" onclick="openModal('taskModal')" style="display:none;">+</button>
+
+      <div id="viewChecklist" style="display:block;">
+        <button id="btnBackToAdmin1" class="btn-secondary btn-back" style="display:none;" onclick="showAdminDasbor()">🔙 Kembali ke Dasbor</button>
+        <div class="grid-layout">
+          <div class="card"><h3 class="card-title">AKTIVITAS HARIAN</h3><div class="table-wrap" id="listHarian"></div></div>
+          <div class="card"><h3 class="card-title">AKTIVITAS MINGGUAN</h3><div class="table-wrap" id="listMingguan"></div></div>
+          <div class="card"><h3 class="card-title">AKTIVITAS BULANAN</h3><div class="table-wrap" id="listBulanan"></div></div>
+          <div class="card"><h3 class="card-title">AKTIVITAS TAMBAHAN</h3><div class="table-wrap" id="listTambahan"></div></div>
+        </div>
+      </div>
+
+      <div id="viewAdminDasbor" style="display:none;">
+        <h2 style="text-align:left; font-size:18px;">Dasbor Administrasi</h2>
+        <div class="thumb-grid">
+          <div class="thumb-card" onclick="openAdminMenu('checklist')"><div class="thumb-icon">☑️</div><div class="thumb-title">Checklist Tugas</div></div>
+          <div class="thumb-card" onclick="openAdminMenu('kelola')"><div class="thumb-icon">📝</div><div class="thumb-title">Kelola Tugas</div></div>
+          <div class="thumb-card" onclick="openAdminMenu('users')"><div class="thumb-icon">👥</div><div class="thumb-title">User PIC</div></div>
+          <div class="thumb-card" onclick="openAdminMenu('rekap')"><div class="thumb-icon">📊</div><div class="thumb-title">Rekap Tugas</div></div>
+          <div class="thumb-card" onclick="openAdminMenu('libur')"><div class="thumb-icon">🗓️</div><div class="thumb-title">Hari Libur</div></div>
+          <div class="thumb-card" onclick="openAdminMenu('identitas')"><div class="thumb-icon">🎨</div><div class="thumb-title">Identitas Aplikasi</div></div>
+          <div class="thumb-card" onclick="openAdminMenu('sistem')"><div class="thumb-icon">⚙️</div><div class="thumb-title">Sistem & Notif</div></div>
+        </div>
+      </div>
+
+      <div id="viewAdminKelola" class="admin-section">
+        <button class="btn-secondary btn-back" onclick="showAdminDasbor()">🔙 Kembali</button>
+        <div class="card"><h3 class="card-title">Semua Tugas (Klik Uraian untuk Edit)</h3><div class="table-wrap" id="adminTableTasks"></div></div>
+      </div>
+
+      <div id="viewAdminUsers" class="admin-section">
+        <button class="btn-secondary btn-back" onclick="showAdminDasbor()">🔙 Kembali</button>
+        <div class="card">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+            <h3 class="card-title" style="margin:0; border:none;">User PIC</h3>
+            <button class="btn-accent" onclick="openModal('userModal')" style="padding:6px 10px; font-size:12px;">+ User Baru</button>
+          </div>
+          <div class="table-wrap" id="adminTableUsers"></div>
+        </div>
+      </div>
+
+      <div id="viewAdminRekap" class="admin-section">
+        <button class="btn-secondary btn-back" onclick="showAdminDasbor()">🔙 Kembali</button>
+        <div class="stat-grid">
+          <div class="stat-card active" id="statAll" onclick="filterRekap('semua')"><div class="stat-icon">📋</div><div class="stat-num" id="cntSemua">0</div><div class="stat-label">Total Semua</div></div>
+          <div class="stat-card" id="statToday" onclick="filterRekap('hari_ini')"><div class="stat-icon">📅</div><div class="stat-num" id="cntHariIni">0</div><div class="stat-label">Hari Ini</div></div>
+          <div class="stat-card" id="statWeek" onclick="filterRekap('minggu_ini')"><div class="stat-icon">📆</div><div class="stat-num" id="cntMingguIni">0</div><div class="stat-label">Minggu Ini</div></div>
+          <div class="stat-card" id="statMonth" onclick="filterRekap('bulan_ini')"><div class="stat-icon">🗓️</div><div class="stat-num" id="cntBulanIni">0</div><div class="stat-label">Bulan Ini</div></div>
+        </div>
+        <div style="display:grid; grid-template-columns:1fr; gap:15px;">
+          <div class="card">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
+              <h3 class="card-title" style="margin:0; border:none;" id="rekapPeriodTitle">Semua Rekap</h3>
+              <div class="filter-bar" style="margin:0;">
+                <button class="filter-pill active" id="pill-semua" onclick="filterRekap('semua')">📋 Semua</button>
+                <button class="filter-pill" id="pill-hari_ini" onclick="filterRekap('hari_ini')">📅 Hari Ini</button>
+                <button class="filter-pill" id="pill-minggu_ini" onclick="filterRekap('minggu_ini')">📆 Minggu Ini</button>
+                <button class="filter-pill" id="pill-bulan_ini" onclick="filterRekap('bulan_ini')">🗓️ Bulan Ini</button>
+              </div>
+            </div>
+            <div class="table-wrap" id="adminTableRekap"></div>
+          </div>
+          <div class="card">
+            <h3 class="card-title">📊 Progres per PIC <span id="picStatPeriod" style="font-size:11px; font-weight:normal; color:var(--text-muted);">(Semua Periode)</span></h3>
+            <div id="picStatList" class="pic-stat-list"></div>
+          </div>
+        </div>
+      </div>
+
+      <div id="viewAdminLibur" class="admin-section">
+        <button class="btn-secondary btn-back" onclick="showAdminDasbor()">🔙 Kembali</button>
+        <div class="card" style="max-width:500px;">
+          <h3 class="card-title">Pengaturan Hari Libur</h3>
+          <p style="font-size:12px; color:#666; margin-bottom:15px;">Pilih tanggal di bawah ini. Notifikasi tugas <strong>tidak akan dikirimkan</strong> pada tanggal yang ditandai sebagai hari libur.</p>
+          <div class="cal-header">
+            <button class="btn-secondary cal-nav" onclick="gantiBulan(-1)">&#9664; Bulan Lalu</button>
+            <h3 id="calBulanTahun" style="font-size:14px; margin:0;">Bulan Tahun</h3>
+            <button class="btn-secondary cal-nav" onclick="gantiBulan(1)">Bulan Depan &#9654;</button>
+          </div>
+          <div class="cal-grid" id="calNamaHari">
+            <div class="cal-day-name">Min</div><div class="cal-day-name">Sen</div><div class="cal-day-name">Sel</div>
+            <div class="cal-day-name">Rab</div><div class="cal-day-name">Kam</div><div class="cal-day-name">Jum</div><div class="cal-day-name">Sab</div>
+          </div>
+          <div class="cal-grid" id="calTanggal"></div>
+          <button class="btn-primary block" style="margin-top:20px;" onclick="simpanLibur()" id="btnSaveLibur">Simpan Kalender Libur</button>
+        </div>
+      </div>
+
+      <div id="viewAdminIdentitas" class="admin-section">
+        <button class="btn-secondary btn-back" onclick="showAdminDasbor()">🔙 Kembali</button>
+        <div class="card" style="max-width: 600px;">
+          <h3 class="card-title">Identitas Aplikasi</h3>
+          <form onsubmit="saveIdentitas(event)">
+            <div class="input-group"><label>Nama Aplikasi</label><input type="text" id="setAppName" required></div>
+            <div class="input-group"><label>Deskripsi Pendek (Layar Login)</label><input type="text" id="setAppDesc" required></div>
+            <div class="form-row">
+              <div class="input-group">
+                <label>Logo Layar Login (PNG/JPG)</label>
+                <input type="file" accept="image/png, image/jpeg" onchange="encodeImageFile(this, 'setLogoLoginBase64', 'previewLogoLogin')">
+                <input type="hidden" id="setLogoLoginBase64">
+                <div style="margin-top:10px; text-align:center;"><img id="previewLogoLogin" src="" style="max-width:100px; border:1px dashed var(--corp-gold); border-radius:4px; padding:5px;"></div>
+              </div>
+              <div class="input-group">
+                <label>Logo Header Utama (PNG/JPG)</label>
+                <input type="file" accept="image/png, image/jpeg" onchange="encodeImageFile(this, 'setLogoHeaderBase64', 'previewLogoHeader')">
+                <input type="hidden" id="setLogoHeaderBase64">
+                <div style="margin-top:10px; text-align:center;"><img id="previewLogoHeader" src="" style="max-width:100px; border:1px dashed var(--corp-gold); border-radius:4px; padding:5px;"></div>
+              </div>
+            </div>
+            <button type="submit" class="btn-primary block" id="btnSaveId">Simpan Identitas</button>
+          </form>
+        </div>
+      </div>
+
+      <div id="viewAdminSistem" class="admin-section">
+        <button class="btn-secondary btn-back" onclick="showAdminDasbor()">🔙 Kembali</button>
+        <div class="card">
+          <h3 class="card-title">Sistem & Notifikasi</h3>
+          <form id="formSettings" onsubmit="saveSettings(event)">
+            <div class="input-group"><label>API Token Fonnte</label><input type="text" id="setToken"></div>
+            <div class="input-group"><label>Kontak Admin (WA)</label><input type="number" id="setAdminWA"></div>
+            <div class="form-row">
+              <div class="input-group"><label>Notif WA?</label><select id="setGunakanWA"><option>Ya</option><option>Tidak</option></select></div>
+              <div class="input-group"><label>Notif Email?</label><select id="setGunakanEmail"><option>Ya</option><option>Tidak</option></select></div>
+            </div>
+            <hr>
+            <h4>Jam Kirim Pesan (contoh: 8, 13, 15 — dikirim sekali pada tiap jam tersebut jika tugas belum diceklis)</h4>
+            <div class="form-row"><div class="input-group"><label>Harian</label><input type="text" id="setJamHarian"></div><div class="input-group"><label>Mingguan</label><input type="text" id="setJamMingguan"></div></div>
+            <div class="form-row"><div class="input-group"><label>Bulanan</label><input type="text" id="setJamBulanan"></div><div class="input-group"><label>Tambahan</label><input type="text" id="setJamTambahan"></div></div>
+            <hr>
+            <h4>Rentang Hari Peringatan (H-?)</h4>
+            <div class="form-row"><div class="input-group"><label>Minggu</label><input type="number" id="setHMingguan"></div><div class="input-group"><label>Bulan</label><input type="number" id="setHBulanan"></div><div class="input-group"><label>Tambah</label><input type="number" id="setHTambahan"></div></div>
+            <button type="submit" class="btn-primary block">Terapkan Pengaturan</button>
+          </form>
+          <hr style="margin:20px 0;">
+          <h4 style="margin-bottom:12px; color:var(--corp-blue);">🔧 Alat & Pengujian</h4>
+          <div style="display:flex; gap:10px; flex-wrap:wrap;">
+            <button class="btn-accent" onclick="aktivasiTrigger()" id="btnTrigger" style="text-transform:none; letter-spacing:0; font-size:12px;">⚡ Aktifkan Trigger Otomatis</button>
+            <button class="btn-success" onclick="testNotif('wa')" id="btnTestWA" style="text-transform:none; letter-spacing:0; font-size:12px;">📱 Test WA</button>
+            <button class="btn-success" onclick="testNotif('email')" id="btnTestEmail" style="text-transform:none; letter-spacing:0; font-size:12px;">📧 Test Email</button>
+          </div>
+          <p style="font-size:11px; color:var(--text-muted); margin-top:10px;">Klik <strong>Aktifkan Trigger Otomatis</strong> setelah deploy untuk mengaktifkan kiriman WA/Email.</p>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <div id="taskModal" class="modal">
+    <div class="modal-box">
+      <h2 id="modalTitle" style="margin-top:0; color:var(--corp-blue);">Formulir Tugas</h2>
+      <form id="taskForm" onsubmit="event.preventDefault(); submitTask();">
+        <input type="hidden" id="inIdTask">
+        <div class="input-group"><label>Uraian Tugas</label><input type="text" id="inDeskripsi" required></div>
+        <div class="input-group">
+          <label>Klasifikasi Waktu</label>
+          <select id="inTipe" onchange="handleTipeChange()" required>
+            <option value="Harian">Aktivitas Harian</option><option value="Mingguan">Aktivitas Mingguan</option>
+            <option value="Bulanan">Aktivitas Bulanan</option><option value="Tambahan">Aktivitas Tambahan</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <div class="input-group" id="tglMulaiWrapper" style="display:none;"><label>Tgl Mulai</label><input type="date" id="inTglMulai"></div>
+          <div class="input-group" id="deadlineWrapper" style="display:none;"><label>Tenggat</label><div id="deadlineInputContainer"></div></div>
+        </div>
+        <div class="input-group" id="progressWrapper" style="display:none;"><label>Progress / Keterangan Pengerjaan</label><input type="text" id="inProgress" placeholder="Contoh: Draft selesai, menunggu review, atau dokumen sudah dikirim"></div>
+        <div class="input-group"><label>Person In Charge (PIC)</label><select id="inPIC" required></select></div>
+        <div class="form-actions">
+          <button type="button" id="btnDelTask" class="btn-danger" style="display:none; margin-right:auto;" onclick="executeDeleteTask()">Hapus</button>
+          <button type="button" class="btn-secondary" onclick="closeModal('taskModal')">Batal</button>
+          <button type="submit" id="saveBtn" class="btn-primary">Simpan</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="userModal" class="modal">
+    <div class="modal-box">
+      <h2 id="userModalTitle" style="margin-top:0; color:var(--corp-blue);">Formulir User</h2>
+      <form id="userForm" onsubmit="event.preventDefault(); submitUser();">
+        <div class="input-group"><label>ID Login</label><input type="text" id="inUName" required></div>
+        <div class="input-group"><label>Kata Sandi</label><input type="text" id="inUPass" required></div>
+        <div class="input-group"><label>Nama Lengkap</label><input type="text" id="inUFullName" required></div>
+        <div class="form-row">
+          <div class="input-group"><label>Role</label><select id="inURole"><option>PIC</option><option>Admin</option></select></div>
+          <div class="input-group"><label>No WA</label><input type="number" id="inUWA" required></div>
+        </div>
+        <div class="input-group"><label>Email</label><input type="email" id="inUEmail"></div>
+        <div class="form-actions">
+          <button type="button" class="btn-secondary" onclick="closeModal('userModal')">Batal</button>
+          <button type="submit" id="saveUserBtn" class="btn-primary">Simpan</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="config.js"></script>
+  <script>
+    let globalTasks = [];
+    let globalUsers = [];
+    let globalUser = null;
+    let globalHolidays = [];
+    let curMonth = new Date().getMonth();
+    let curYear = new Date().getFullYear();
+    let notifTaskSudahDikirim = new Set();
+    let notifCheckInterval = null;
+    let globalRekap = [];
+    let activeFilter = 'semua';
+
+    function escapeHtml(value) {
+      return String(value ?? '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#039;');
+    }
+
+    function parseLocalDate(dateStr) {
+      if (!dateStr || dateStr === "-") return null;
+      const parts = String(dateStr).substring(0, 10).split("-").map(Number);
+      if (parts.length !== 3 || parts.some(isNaN)) return null;
+      return new Date(parts[0], parts[1] - 1, parts[2]);
+    }
+
+    function customConfirm(pesan, icon) {
+      return new Promise((resolve) => {
+        document.getElementById('confirmMsg').innerText = pesan;
+        document.getElementById('confirmIcon').innerText = icon || '❓';
+        document.getElementById('confirmModal').style.display = 'flex';
+        function onOke() { document.getElementById('confirmModal').style.display = 'none'; cleanup(); resolve(true); }
+        function onBatal() { document.getElementById('confirmModal').style.display = 'none'; cleanup(); resolve(false); }
+        function cleanup() {
+          document.getElementById('confirmBtnOke').removeEventListener('click', onOke);
+          document.getElementById('confirmBtnBatal').removeEventListener('click', onBatal);
+        }
+        document.getElementById('confirmBtnOke').addEventListener('click', onOke);
+        document.getElementById('confirmBtnBatal').addEventListener('click', onBatal);
+      });
+    }
+
+    const TIMEOUT_MENIT = 3;
+    const TIMEOUT_MS = TIMEOUT_MENIT * 60 * 1000;
+    const WARNING_MS = (TIMEOUT_MENIT - 1) * 60 * 1000;
+    let inactivityTimer = null, warningTimer = null, countdownInterval = null;
+
+    function resetAutoLogout() {
+      if (!globalUser) return;
+      clearTimeout(inactivityTimer);
+      clearTimeout(warningTimer);
+      clearInterval(countdownInterval);
+      document.getElementById('inactivityBar').style.display = 'none';
+      warningTimer = setTimeout(() => {
+        let sisaDetik = 60;
+        document.getElementById('countdownText').innerText = sisaDetik;
+        document.getElementById('inactivityBar').style.display = 'block';
+        countdownInterval = setInterval(() => {
+          sisaDetik--;
+          document.getElementById('countdownText').innerText = sisaDetik;
+          if (sisaDetik <= 0) clearInterval(countdownInterval);
+        }, 1000);
+      }, WARNING_MS);
+      inactivityTimer = setTimeout(() => {
+        clearInterval(countdownInterval);
+        document.getElementById('inactivityBar').style.display = 'none';
+        doLogout();
+        showToast("Sesi Anda berakhir karena tidak ada aktivitas (" + TIMEOUT_MENIT + " menit).");
+      }, TIMEOUT_MS);
+    }
+
+    function stopAutoLogout() {
+      clearTimeout(inactivityTimer);
+      clearTimeout(warningTimer);
+      clearInterval(countdownInterval);
+      document.getElementById('inactivityBar').style.display = 'none';
+      inactivityTimer = null;
+      warningTimer = null;
+    }
+
+    ['mousemove','keypress','click','scroll','touchstart'].forEach(evt => {
+      document.addEventListener(evt, resetAutoLogout, { passive: true });
+    });
+
+    function toggleNotifPanel() {
+      const panel = document.getElementById('notifPanel');
+      panel.style.display = panel.style.display === 'block' ? 'none' : 'block';
+    }
+
+    function updateNotifPanel(tasks) {
+      const badgeBtn = document.getElementById('notifBadgeBtn');
+      const badgeCount = document.getElementById('notifBadgeCount');
+      const list = document.getElementById('notifPanelList');
+      const empty = document.getElementById('notifPanelEmpty');
+      badgeBtn.style.display = globalUser ? 'block' : 'none';
+      if (!tasks || !tasks.length || !globalUser) {
+        badgeCount.innerText = 0;
+        badgeCount.style.display = 'none';
+        list.innerHTML = '';
+        list.appendChild(empty);
+        empty.style.display = 'block';
+        return;
+      }
+      const today = new Date();
+      today.setHours(0,0,0,0);
+      const mapHari = { "Minggu":0,"Senin":1,"Selasa":2,"Rabu":3,"Kamis":4,"Jumat":5,"Sabtu":6 };
+      const currDay = today.getDay();
+      const currDate = today.getDate();
+      const items = [];
+      tasks.forEach(t => {
+        if (t.Status === "Selesai") return;
+        const myTask = globalUser && (globalUser.username === t.PIC || globalUser.role === "Admin");
+        if (!myTask) return;
+        let label = "", cls = "upcoming", icon = "📋";
+        if (t.Tipe === "Harian") {
+          label = "Hari ini"; cls = "deadline-today"; icon = "📅";
+        } else if (t.Tipe === "Mingguan") {
+          const td = mapHari[t.Deadline];
+          if (td !== undefined) {
+            const s = td >= currDay ? td - currDay : 7 - currDay + td;
+            if (s === 0) { label = "Deadline HARI INI ⚠️"; cls = "deadline-today"; icon = "⚠️"; }
+            else if (s === 1) { label = "Deadline besok (" + t.Deadline + ")"; cls = "upcoming"; icon = "📆"; }
+            else return;
+          } else return;
+        } else if (t.Tipe === "Bulanan") {
+          const td2 = parseInt(t.Deadline);
+          if (td2 === currDate) { label = "Deadline tgl " + t.Deadline + " — HARI INI ⚠️"; cls = "deadline-today"; icon = "⚠️"; }
+          else if (td2 === currDate + 1) { label = "Deadline besok, tgl " + t.Deadline; cls = "upcoming"; icon = "📆"; }
+          else return;
+        } else if (t.Tipe === "Tambahan") {
+          if (!t.Deadline || t.Deadline === "-") return;
+          const tglDl = parseLocalDate(t.Deadline);
+          if (!tglDl) return;
+          tglDl.setHours(0,0,0,0);
+          const s2 = Math.round((tglDl - today) / 86400000);
+          if (s2 < 0) { label = "TERLAMBAT " + Math.abs(s2) + " hari 🚨"; cls = "overdue"; icon = "🚨"; }
+          else if (s2 === 0) { label = "Deadline HARI INI ⚠️"; cls = "deadline-today"; icon = "⚠️"; }
+          else if (s2 <= 2) { label = "Deadline " + s2 + " hari lagi"; cls = "upcoming"; icon = "📆"; }
+          else return;
+        }
+        items.push({ nama: t.Deskripsi, label, cls, icon });
+      });
+      badgeCount.innerText = items.length;
+      badgeCount.style.display = items.length > 0 ? 'flex' : 'none';
+      if (items.length === 0) {
+        empty.style.display = 'block';
+        list.innerHTML = '';
+        list.appendChild(empty);
+        return;
+      }
+      empty.style.display = 'none';
+      list.innerHTML = items.map(it => `
+        <div class="notif-item ${it.cls}">
+          <span class="notif-icon">${it.icon}</span>
+          <div class="notif-body"><strong>${escapeHtml(it.nama)}</strong><span>${escapeHtml(it.label)}</span></div>
+        </div>`).join('');
+    }
+
+    function cekDukunganNotifikasi() { return ('Notification' in window); }
+    function tutupNotifBanner() { document.getElementById('notifBanner').style.display = 'none'; localStorage.setItem('notif_banner_dismissed', '1'); }
+    function mintaIzinNotifikasi() {
+      if (!cekDukunganNotifikasi()) { showToast("Browser Anda tidak mendukung notifikasi."); tutupNotifBanner(); return; }
+      Notification.requestPermission().then(permission => {
+        tutupNotifBanner();
+        if (permission === 'granted') { showToast("Notifikasi berhasil diaktifkan! ✅"); mulaiCekNotifTugas(); }
+        else showToast("Izin notifikasi ditolak.");
+      });
+    }
+
+    function cekTugasDanKirimNotif() {
+      if (!globalUser || !globalTasks || globalTasks.length === 0) return;
+      updateNotifPanel(globalTasks);
+    }
+
+    function mulaiCekNotifTugas() {
+      if (notifCheckInterval) clearInterval(notifCheckInterval);
+      cekTugasDanKirimNotif();
+      notifCheckInterval = setInterval(cekTugasDanKirimNotif, 5 * 60 * 1000);
+    }
+
+    function tampilkanBannerNotifJikaPerlu() {
+      if (!cekDukunganNotifikasi()) return;
+      if (Notification.permission === 'granted') { mulaiCekNotifTugas(); return; }
+      if (Notification.permission === 'denied') return;
+      if (localStorage.getItem('notif_banner_dismissed') === '1') return;
+      document.getElementById('notifBanner').style.display = 'flex';
+    }
+
+    window.onerror = function(msg) { showToast("Sistem Gagal: " + msg); };
+
+    function showToast(msg) {
+      const t = document.getElementById("toast");
+      t.innerText = msg;
+      t.className = "toast show";
+      setTimeout(() => { t.className = t.className.replace("show", ""); }, 4000);
+    }
+
+    function callAPI(payload) {
+      return new Promise((resolve, reject) => {
+        if (globalUser) {
+          payload.sessionUsername = globalUser.username;
+          if (!payload.username) payload.username = globalUser.username;
+        } else {
+          payload.username = payload.username || "guest";
+        }
+        const timeoutId = setTimeout(() => {
+          showToast("Koneksi Server Timeout. Pastikan Otorisasi di Apps Script disetujui.");
+          reject(new Error("Timeout"));
+        }, 30000);
+        if (typeof google !== 'undefined' && google.script && google.script.run) {
+          google.script.run
+            .withSuccessHandler((res) => { clearTimeout(timeoutId); if (res && res.status === "error") showToast(res.message || "Terjadi kesalahan."); resolve(res); })
+            .withFailureHandler(error => { clearTimeout(timeoutId); showToast("Server Gagal: " + error.message); reject(error); })
+            .prosesAPI(payload);
+          return;
+        }
+        const apiUrl = (window.SIBACOT_CONFIG && window.SIBACOT_CONFIG.API_URL) || "";
+        if (!apiUrl || apiUrl.includes("PASTE_URL_WEB_APP_GAS_DI_SINI")) {
+          clearTimeout(timeoutId);
+          showToast("API GAS belum diatur. Isi URL Web App di config.js.");
+          reject(new Error("API_URL kosong"));
+          return;
+        }
+        fetch(apiUrl, { method:"POST", redirect:"follow", headers:{"Content-Type":"text/plain;charset=utf-8"}, body:JSON.stringify(payload) })
+          .then(r => r.text())
+          .then(txt => { clearTimeout(timeoutId); let res = JSON.parse(txt); if (res && res.status === "error") showToast(res.message || "Terjadi kesalahan."); resolve(res); })
+          .catch(error => { clearTimeout(timeoutId); showToast("API GitHub/GAS gagal: " + error.message); reject(error); });
+      });
+    }
+
+    document.addEventListener("DOMContentLoaded", checkSession);
+
+    function checkSession() {
+      try { globalUser = JSON.parse(localStorage.getItem("koseklis_user")); } catch (e) { globalUser = null; }
+      if (globalUser) {
+        document.getElementById("loginSection").style.display = "none";
+        document.getElementById("appSection").style.display = "block";
+        const now = new Date();
+        const namaHari = ["Minggu","Senin","Selasa","Rabu","Kamis","Jumat","Sabtu"];
+        const namaBulan = ["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];
+        const strTanggal = `${namaHari[now.getDay()]}, ${String(now.getDate()).padStart(2,'0')} ${namaBulan[now.getMonth()]} ${now.getFullYear()}`;
+        document.getElementById("welcomeMsg").innerHTML = `<div>Halo, <strong style="color:var(--corp-blue);">${escapeHtml(globalUser.nama)}</strong><br><span style="font-size:11px; color:#666;">${strTanggal}</span></div>`;
+        document.getElementById("fabAdd").style.display = globalUser.role === "Admin" ? "flex" : "none";
+        if (globalUser.role === "Admin") showAdminDasbor();
+        else {
+          document.getElementById("viewChecklist").style.display = "block";
+          document.getElementById("viewAdminDasbor").style.display = "none";
+          document.getElementById("btnBackToAdmin1").style.display = "none";
+          document.querySelectorAll('.admin-section').forEach(el => el.style.display = 'none');
+        }
+        resetAutoLogout();
+        loadData();
+        tampilkanBannerNotifJikaPerlu();
+        const headerLogo = document.getElementById("headerAppLogo");
+        if (headerLogo) headerLogo.onclick = handleLogoTap;
+      } else {
+        document.getElementById("loginSection").style.display = "flex";
+        document.getElementById("appSection").style.display = "none";
+        document.getElementById("fabAdd").style.display = "none";
+        document.getElementById("notifBanner").style.display = "none";
+        document.getElementById("notifBadgeBtn").style.display = "none";
+        stopAutoLogout();
+        if (notifCheckInterval) { clearInterval(notifCheckInterval); notifCheckInterval = null; }
+        loadSettingsOnlyForLogin();
+      }
+    }
+
+    let logoTapCount = 0, logoTapTimer = null;
+    function handleLogoTap() {
+      logoTapCount++;
+      if (logoTapCount === 1) logoTapTimer = setTimeout(() => { logoTapCount = 0; }, 400);
+      else if (logoTapCount >= 2) {
+        clearTimeout(logoTapTimer);
+        logoTapCount = 0;
+        customConfirm('Yakin ingin keluar dari aplikasi?', '🚪').then(ok => { if (ok) doLogout(); });
+      }
+    }
+
+    async function loadSettingsOnlyForLogin() {
+      try {
+        const data = await callAPI({ action: "getData", role: "PIC", username: "guest" });
+        if (data && data.settings) applyIdentity(data.settings);
+      } catch (err) {}
+    }
+
+    function handleEnter(e) {
+      if (e.key === "Enter" || e.keyCode === 13) { e.preventDefault(); doLogin(); }
+    }
+
+    async function doLogin() {
+      const uInput = document.getElementById("inUser").value.trim();
+      const pInput = document.getElementById("inPass").value;
+      if (!uInput || !pInput) { showToast("Harap isi NIP dan Kata Sandi."); return; }
+      const btn = document.getElementById("btnLogin");
+      btn.disabled = true;
+      try {
+        const data = await callAPI({ action: "login", username: uInput, password: pInput });
+        if (data.status === "success") {
+          localStorage.setItem("koseklis_user", JSON.stringify({ username: data.username, nama: data.nama, role: data.role }));
+          checkSession();
+        } else showToast(data.message);
+      } catch (err) {}
+      btn.disabled = false;
+    }
+
+    function doLogout() {
+      stopAutoLogout();
+      globalUser = null;
+      notifTaskSudahDikirim.clear();
+      if (notifCheckInterval) { clearInterval(notifCheckInterval); notifCheckInterval = null; }
+      localStorage.removeItem("koseklis_user");
+      document.getElementById("inUser").value = "";
+      document.getElementById("inPass").value = "";
+      document.getElementById('notifPanel').style.display = 'none';
+      checkSession();
+    }
+
+    function showAdminDasbor() {
+      document.getElementById("viewChecklist").style.display = "none";
+      document.querySelectorAll('.admin-section').forEach(el => el.style.display = 'none');
+      document.getElementById("viewAdminDasbor").style.display = "block";
+      document.getElementById("fabAdd").style.display = "none";
+    }
+
+    function openAdminMenu(menu) {
+      document.getElementById("viewAdminDasbor").style.display = "none";
+      document.getElementById("viewChecklist").style.display = "none";
+      document.getElementById("fabAdd").style.display = "none";
+      document.querySelectorAll('.admin-section').forEach(el => el.style.display = 'none');
+      if (menu === 'checklist') {
+        document.getElementById("viewChecklist").style.display = "block";
+        document.getElementById("btnBackToAdmin1").style.display = "block";
+        document.getElementById("fabAdd").style.display = globalUser.role === "Admin" ? "flex" : "none";
+      } else if (menu === 'kelola') {
+        document.getElementById("viewAdminKelola").style.display = "block";
+        document.getElementById("fabAdd").style.display = globalUser.role === "Admin" ? "flex" : "none";
+      } else if (menu === 'users') document.getElementById("viewAdminUsers").style.display = "block";
+      else if (menu === 'rekap') document.getElementById("viewAdminRekap").style.display = "block";
+      else if (menu === 'identitas') document.getElementById("viewAdminIdentitas").style.display = "block";
+      else if (menu === 'sistem') document.getElementById("viewAdminSistem").style.display = "block";
+      else if (menu === 'libur') { document.getElementById("viewAdminLibur").style.display = "block"; renderCalendar(); }
+    }
+
+    async function loadData() {
+      try {
+        const data = await callAPI({ action: "getData", role: globalUser.role, username: globalUser.username });
+        if (data.status === "success") {
+          globalTasks = data.tasks || [];
+          globalUsers = data.allUsers || [];
+          globalHolidays = data.holidays ? data.holidays.map(h => String(h).trim().substring(0, 10)).filter(Boolean) : [];
+          renderTables(globalTasks);
+          applyIdentity(data.settings);
+          if (globalUser.role === "Admin") {
+            renderAdminTasksTable(globalTasks);
+            renderAdminUsersTable(globalUsers);
+            renderAdminRekapTable(data.rekapan || []);
+            fillSettings(data.settings);
+          }
+          populatePIC(data.pics || []);
+          cekTugasDanKirimNotif();
+          const viewLibur = document.getElementById("viewAdminLibur");
+          if (viewLibur && viewLibur.style.display === "block") renderCalendar();
+        }
+      } catch (err) { console.error(err); }
+    }
+
+    function formatCompactDate(dateStr) {
+      if (!dateStr || dateStr === "-") return "-";
+      const parts = String(dateStr).split("-");
+      if (parts.length === 3) {
+        const months = ["Jan","Feb","Mar","Apr","Mei","Jun","Jul","Ags","Sep","Okt","Nov","Des"];
+        const d = parseInt(parts[2], 10);
+        const m = months[parseInt(parts[1],10)-1];
+        const y = parts[0];
+        const currentYear = new Date().getFullYear().toString();
+        if (y === currentYear) return `${d} ${m}`;
+        return `${d} ${m} '${y.substring(2)}`;
+      }
+      return dateStr;
+    }
+
+    function getLogoUrl(id, fallbackUrl) {
+      if (id && id.length > 5) return `https://drive.google.com/thumbnail?id=${id}&sz=w1000`;
+      return fallbackUrl || "https://upload.wikimedia.org/wikipedia/commons/a/a2/Logo_of_Bank_Mandiri.svg";
+    }
+
+    function applyIdentity(s) {
+      if (!s) return;
+      const appName = s.App_Name || "SIBACOT";
+      const appDesc = s.App_Desc || "Sistem Manajemen & Checklist Tugas Terpadu";
+      const logoLogin = getLogoUrl(s.App_Logo_Login_Id, s.App_Logo_Login);
+      const logoHeader = getLogoUrl(s.App_Logo_Header_Id, s.App_Logo_Header);
+      const upName = appName.toUpperCase();
+      if (upName === "SIBACOT") {
+        const htmlSibacot = '<span class="sibacot-si">SI</span><span class="sibacot-bacot">BACOT</span>';
+        document.getElementById('headerAppName').innerHTML = htmlSibacot;
+        document.getElementById('loginAppName').innerHTML = htmlSibacot;
+      } else {
+        document.getElementById('headerAppName').innerText = upName;
+        document.getElementById('loginAppName').innerText = appName;
+      }
+      document.getElementById('loginAppDesc').innerText = appDesc;
+      document.getElementById('loginAppLogo').src = logoLogin;
+      document.getElementById('headerAppLogo').src = logoHeader;
+      if (document.getElementById('previewLogoLogin')) document.getElementById('previewLogoLogin').src = logoLogin;
+      if (document.getElementById('previewLogoHeader')) document.getElementById('previewLogoHeader').src = logoHeader;
+      if (document.getElementById('setAppName')) document.getElementById('setAppName').value = appName;
+      if (document.getElementById('setAppDesc')) document.getElementById('setAppDesc').value = appDesc;
+    }
+
+    function encodeImageFile(element, hiddenId, previewId) {
+      const file = element.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const img = new Image();
+        img.onload = function() {
+          const canvas = document.createElement('canvas');
+          const MAX_WIDTH = 400;
+          const scaleSize = MAX_WIDTH / img.width;
+          canvas.width = MAX_WIDTH;
+          canvas.height = img.height * scaleSize;
+          canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+          const dataUrl = canvas.toDataURL('image/png');
+          document.getElementById(hiddenId).value = dataUrl;
+          document.getElementById(previewId).src = dataUrl;
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    async function saveIdentitas(e) {
+      e.preventDefault();
+      const btn = document.getElementById("btnSaveId");
+      btn.innerText = "Menyimpan ke Drive...";
+      btn.disabled = true;
+      try {
+        const res = await callAPI({
+          action: "saveIdentity",
+          settings: {
+            App_Name: document.getElementById('setAppName').value,
+            App_Desc: document.getElementById('setAppDesc').value,
+            App_Logo_Login_Base64: document.getElementById('setLogoLoginBase64').value,
+            App_Logo_Header_Base64: document.getElementById('setLogoHeaderBase64').value
+          }
+        });
+        if (res.status === "success") {
+          showToast("Identitas berhasil diperbarui.");
+          document.getElementById('setLogoLoginBase64').value = "";
+          document.getElementById('setLogoHeaderBase64').value = "";
+          await loadData();
+        } else showToast("Gagal menyimpan identitas: " + (res.message || "Server error"));
+      } catch(err) { showToast("Gagal menyimpan identitas."); }
+      btn.innerText = "Simpan Identitas";
+      btn.disabled = false;
+    }
+
+    function formatDeadlineRead(tipe, valForm) {
+      if (tipe === "Harian") return `<span style="color:var(--corp-gold); font-weight:bold;">Tiap Hari</span>`;
+      if (tipe === "Mingguan") return `Tiap ${escapeHtml(valForm)}`;
+      if (tipe === "Bulanan") return `Tgl ${escapeHtml(valForm)}`;
+      return `${formatCompactDate(valForm)}`;
+    }
+
+    function renderTables(tasks) {
+      const sec = { Harian:[], Mingguan:[], Bulanan:[], Tambahan:[] };
+      tasks.forEach(t => { if (sec[t.Tipe]) sec[t.Tipe].push(t); });
+      ['Harian','Mingguan','Bulanan','Tambahan'].forEach(tipe => {
+        const container = document.getElementById(`list${tipe}`);
+        if (sec[tipe].length === 0) { container.innerHTML = "<div class='empty-state'>Belum ada tugas</div>"; return; }
+        let html = "";
+        if (tipe === "Tambahan") {
+          html = `<table><tr><th>Uraian (Klik Edit)</th><th>Mulai</th><th>Tenggat</th><th>Prog</th><th>PIC</th><th class="td-center">Cek</th></tr>`;
+          sec[tipe].forEach(t => {
+            const isSelesai = t.Status === "Selesai" ? "checked" : "";
+            const rClass = t.Status === "Selesai" ? "selesai" : "";
+            const canCheck = (globalUser.username === t.PIC || globalUser.role === "Admin") ? "" : "disabled";
+            const canEdit = (globalUser.role === "Admin");
+            const clickAction = canEdit ? `onclick="editTask('${escapeHtml(t.ID_Task)}')"` : ``;
+            const editIcon = canEdit ? `<span class="edit-icon">✏️</span>` : ``;
+            html += `<tr class="${rClass}"><td class="desc-text" ${clickAction}>${escapeHtml(t.Deskripsi)} ${editIcon}</td><td>${formatCompactDate(t.Tgl_Mulai)}</td><td>${formatDeadlineRead(t.Tipe, t.Deadline)}</td><td>${escapeHtml(t.Progress || '-')}</td><td>${escapeHtml(t.Nama_PIC || t.PIC)}</td><td class="td-center"><input type="checkbox" onchange="updateStatus(this,'${escapeHtml(t.ID_Task)}')" ${isSelesai} ${canCheck}></td></tr>`;
+          });
+        } else {
+          html = `<table><tr><th>Uraian (Klik Edit)</th><th>Tenggat</th><th>PIC</th><th class="td-center">Cek</th></tr>`;
+          sec[tipe].forEach(t => {
+            const isSelesai = t.Status === "Selesai" ? "checked" : "";
+            const rClass = t.Status === "Selesai" ? "selesai" : "";
+            const canCheck = (globalUser.username === t.PIC || globalUser.role === "Admin") ? "" : "disabled";
+            const canEdit = (globalUser.role === "Admin");
+            const clickAction = canEdit ? `onclick="editTask('${escapeHtml(t.ID_Task)}')"` : ``;
+            const editIcon = canEdit ? `<span class="edit-icon">✏️</span>` : ``;
+            html += `<tr class="${rClass}"><td class="desc-text" ${clickAction}>${escapeHtml(t.Deskripsi)} ${editIcon}</td><td>${formatDeadlineRead(t.Tipe, t.Deadline)}</td><td>${escapeHtml(t.Nama_PIC || t.PIC)}</td><td class="td-center"><input type="checkbox" onchange="updateStatus(this,'${escapeHtml(t.ID_Task)}')" ${isSelesai} ${canCheck}></td></tr>`;
+          });
+        }
+        container.innerHTML = html + `</table>`;
+      });
+    }
+
+    function renderAdminTasksTable(tasks) {
+      const container = document.getElementById("adminTableTasks");
+      if (!tasks || tasks.length === 0) { container.innerHTML = "<div class='empty-state'>Kosong</div>"; return; }
+      let html = `<table><tr><th>Uraian (Klik Edit)</th><th>Tipe</th><th>Tenggat</th><th>PIC</th></tr>`;
+      tasks.forEach(t => { html += `<tr><td class="desc-text" onclick="editTask('${escapeHtml(t.ID_Task)}')">${escapeHtml(t.Deskripsi)} <span class="edit-icon">✏️</span></td><td>${escapeHtml(t.Tipe)}</td><td>${formatDeadlineRead(t.Tipe, t.Deadline)}</td><td>${escapeHtml(t.PIC)}</td></tr>`; });
+      container.innerHTML = html + `</table>`;
+    }
+
+    function renderAdminUsersTable(users) {
+      const container = document.getElementById("adminTableUsers");
+      if (!users || users.length === 0) { container.innerHTML = "<div class='empty-state'>Belum ada user</div>"; return; }
+      let html = `<table><tr><th>Nama (Klik Edit)</th><th>Role</th><th>WA</th><th>Aksi</th></tr>`;
+      users.forEach(u => {
+        const hapusBtn = u.username === 'admin' ? '-' : `<button class="btn-danger" style="padding:5px 8px; font-size:11px;" onclick="deleteUser('${escapeHtml(u.username)}')">Hapus</button>`;
+        html += `<tr><td class="desc-text" onclick="editUser('${escapeHtml(u.username)}')">${escapeHtml(u.nama)} <span class="edit-icon">✏️</span></td><td>${escapeHtml(u.role)}</td><td>${escapeHtml(u.wa)}</td><td>${hapusBtn}</td></tr>`;
+      });
+      container.innerHTML = html + `</table>`;
+    }
+
+    function parseWaktuRekap(str) {
+      if (!str) return null;
+      const m = String(str).match(/(\d{2})\/(\d{2})\/(\d{4})(?: (\d{2}):(\d{2}):(\d{2}))?/);
+      if (!m) return null;
+      return new Date(+m[3], +m[2]-1, +m[1], +(m[4]||0), +(m[5]||0), +(m[6]||0));
+    }
+    function awalHari(d) { const x = new Date(d); x.setHours(0,0,0,0); return x; }
+    function awalMinggu(d) { const x = awalHari(d); x.setDate(x.getDate() - x.getDay()); return x; }
+    function awalBulan(d) { return new Date(d.getFullYear(), d.getMonth(), 1); }
+    function filterDataRekap(rekap, filter) {
+      if (!rekap || !rekap.length) return [];
+      const now = new Date();
+      if (filter === 'semua') return rekap;
+      return rekap.filter(r => {
+        const d = parseWaktuRekap(r.waktu);
+        if (!d) return false;
+        if (filter === 'hari_ini') return d >= awalHari(now);
+        if (filter === 'minggu_ini') return d >= awalMinggu(now);
+        if (filter === 'bulan_ini') return d >= awalBulan(now);
+        return true;
+      });
+    }
+
+    function renderAdminRekapTable(rekap) {
+      globalRekap = rekap || [];
+      document.getElementById('cntSemua').innerText = globalRekap.length;
+      document.getElementById('cntHariIni').innerText = filterDataRekap(globalRekap, 'hari_ini').length;
+      document.getElementById('cntMingguIni').innerText = filterDataRekap(globalRekap, 'minggu_ini').length;
+      document.getElementById('cntBulanIni').innerText = filterDataRekap(globalRekap, 'bulan_ini').length;
+      renderRekapDenganFilter(activeFilter);
+    }
+
+    function filterRekap(filter) {
+      activeFilter = filter;
+      ['semua','hari_ini','minggu_ini','bulan_ini'].forEach((f, i) => {
+        const cardIds = ['statAll','statToday','statWeek','statMonth'];
+        document.getElementById(cardIds[i]).classList.toggle('active', f === filter);
+        const pill = document.getElementById('pill-' + f);
+        if (pill) pill.classList.toggle('active', f === filter);
+      });
+      renderRekapDenganFilter(filter);
+    }
+
+    function renderRekapDenganFilter(filter) {
+      const labelMap = { semua:'Semua Rekap', hari_ini:'Rekap Hari Ini', minggu_ini:'Rekap Minggu Ini', bulan_ini:'Rekap Bulan Ini' };
+      const periodMap = { semua:'(Semua Periode)', hari_ini:'(Hari Ini)', minggu_ini:'(Minggu Ini)', bulan_ini:'(Bulan Ini)' };
+      document.getElementById('rekapPeriodTitle').innerText = labelMap[filter] || 'Rekap';
+      document.getElementById('picStatPeriod').innerText = periodMap[filter] || '';
+      const filtered = filterDataRekap(globalRekap, filter).slice().reverse();
+      const c = document.getElementById("adminTableRekap");
+      if (!filtered.length) {
+        c.innerHTML = `<div class='empty-state'>Belum ada tugas selesai untuk periode ini.</div>`;
+        document.getElementById('picStatList').innerHTML = `<div class='empty-state'>Belum ada data.</div>`;
+        return;
+      }
+      const bc = { Harian:'badge-harian', Mingguan:'badge-mingguan', Bulanan:'badge-bulanan', Tambahan:'badge-tambahan' };
+      const now = new Date();
+      let html = `<table><tr><th>Waktu Selesai</th><th>Uraian Tugas</th><th>Tipe</th><th>PIC</th></tr>`;
+      filtered.forEach(r => {
+        const d = parseWaktuRekap(r.waktu);
+        let waktuTampil = escapeHtml(r.waktu || '-');
+        if (d) {
+          const sameDay = d.toDateString() === now.toDateString();
+          const jam = String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+          const tgl = String(d.getDate()).padStart(2,'0') + '/' + String(d.getMonth()+1).padStart(2,'0');
+          waktuTampil = sameDay ? `<strong style="color:var(--corp-blue);">Hari ini</strong><br><span style="font-size:11px;">${jam}</span>` : `${tgl}<br><span style="font-size:11px;">${jam}</span>`;
+        }
+        const badgeCls = bc[r.tipe] || 'badge-tambahan';
+        html += `<tr><td style="white-space:nowrap; font-size:11px;">${waktuTampil}</td><td>${escapeHtml(r.deskripsi)}</td><td><span class="badge ${badgeCls}">${escapeHtml(r.tipe || '-')}</span></td><td>${escapeHtml(r.nama_pic || r.pic)}</td></tr>`;
+      });
+      c.innerHTML = html + `</table>`;
+      const selesaiPerPic = {};
+      filtered.forEach(r => {
+        if (!selesaiPerPic[r.pic]) selesaiPerPic[r.pic] = { harian:0, mingguan:0, bulanan:0, tambahan:0, total:0 };
+        const tKey = (r.tipe || '').toLowerCase();
+        if (selesaiPerPic[r.pic][tKey] !== undefined) selesaiPerPic[r.pic][tKey]++;
+        else selesaiPerPic[r.pic].tambahan++;
+        selesaiPerPic[r.pic].total++;
+      });
+      const totalPerPic = {};
+      if (globalTasks && globalTasks.length) {
+        globalTasks.forEach(t => {
+          const nm = t.Nama_PIC || t.PIC;
+          if (!totalPerPic[nm]) totalPerPic[nm] = 0;
+          totalPerPic[nm]++;
+        });
+      }
+      const sortedPics = Object.entries(selesaiPerPic).sort((a,b) => b[1].total - a[1].total);
+      const maxSelesai = sortedPics.length ? sortedPics[0][1].total : 1;
+      let picHtml = '';
+      sortedPics.forEach(([nama, data]) => {
+        const total = totalPerPic[nama] || data.total;
+        const pct = Math.round((data.total / total) * 100);
+        const barWidth = Math.round((data.total / maxSelesai) * 100);
+        const tipeSummary = [
+          data.harian ? `<span class="badge badge-harian">${data.harian} Harian</span>` : '',
+          data.mingguan ? `<span class="badge badge-mingguan">${data.mingguan} Mingguan</span>` : '',
+          data.bulanan ? `<span class="badge badge-bulanan">${data.bulanan} Bulanan</span>` : '',
+          data.tambahan ? `<span class="badge badge-tambahan">${data.tambahan} Tambahan</span>` : ''
+        ].filter(Boolean).join(' ');
+        picHtml += `<div class="pic-stat-item"><div class="pic-stat-header"><span class="pic-stat-name">👤 ${escapeHtml(nama)}</span><span class="pic-stat-count">${data.total} selesai / ${total} tugas &nbsp;<strong style="color:var(--corp-blue);">${pct}%</strong></span></div><div class="progress-bar-wrap"><div class="progress-bar-fill" style="width:${barWidth}%"></div></div><div style="margin-top:6px; display:flex; flex-wrap:wrap; gap:4px;">${tipeSummary}</div></div>`;
+      });
+      document.getElementById('picStatList').innerHTML = picHtml || `<div class='empty-state'>Belum ada data.</div>`;
+    }
+
+    function gantiBulan(offset) {
+      curMonth += offset;
+      if (curMonth < 0) { curMonth = 11; curYear--; }
+      else if (curMonth > 11) { curMonth = 0; curYear++; }
+      renderCalendar();
+    }
+
+    function renderCalendar() {
+      const namaBulan = ["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];
+      document.getElementById("calBulanTahun").innerText = `${namaBulan[curMonth]} ${curYear}`;
+      const firstDay = new Date(curYear, curMonth, 1).getDay();
+      const daysInMonth = new Date(curYear, curMonth + 1, 0).getDate();
+      const calContainer = document.getElementById("calTanggal");
+      const holidaySet = new Set((globalHolidays || []).map(h => String(h).trim().substring(0, 10)).filter(Boolean));
+      calContainer.innerHTML = "";
+      for (let i = 0; i < firstDay; i++) calContainer.innerHTML += `<div class="cal-day empty"></div>`;
+      for (let i = 1; i <= daysInMonth; i++) {
+        const tglStr = `${curYear}-${String(curMonth + 1).padStart(2, "0")}-${String(i).padStart(2, "0")}`;
+        const isHoliday = holidaySet.has(tglStr) ? "is-holiday" : "";
+        calContainer.innerHTML += `<div class="cal-day ${isHoliday}" onclick="toggleLibur('${tglStr}', this)">${i}</div>`;
+      }
+    }
+
+    function toggleLibur(tglStr, el) {
+      tglStr = String(tglStr).trim().substring(0, 10);
+      const idx = globalHolidays.indexOf(tglStr);
+      if (idx > -1) { globalHolidays.splice(idx, 1); el.classList.remove('is-holiday'); }
+      else { globalHolidays.push(tglStr); el.classList.add('is-holiday'); }
+      globalHolidays = [...new Set(globalHolidays)].sort();
+    }
+
+    async function simpanLibur() {
+      const btn = document.getElementById("btnSaveLibur");
+      btn.innerText = "Menyimpan...";
+      btn.disabled = true;
+      try {
+        globalHolidays = [...new Set((globalHolidays || []).map(h => String(h).trim().substring(0, 10)).filter(Boolean))].sort();
+        const res = await callAPI({ action: "saveHolidays", holidays: globalHolidays });
+        if (res && res.status === "success") {
+          showToast("Hari libur berhasil disimpan!");
+          await loadData();
+          renderCalendar();
+        } else showToast("Gagal menyimpan hari libur.");
+      } catch (e) { showToast("Gagal menyimpan hari libur."); }
+      btn.innerText = "Simpan Kalender Libur";
+      btn.disabled = false;
+    }
+
+    function fillSettings(s) {
+      if (!s) return;
+      document.getElementById("setToken").value = s.Token_Fonnte || "";
+      document.getElementById("setAdminWA").value = s.No_WA_Admin || "";
+      document.getElementById("setGunakanWA").value = s.Gunakan_WA || "Ya";
+      document.getElementById("setGunakanEmail").value = s.Gunakan_Email || "Tidak";
+      document.getElementById("setJamHarian").value = s.Jam_Notif_Harian || "8, 13, 16";
+      document.getElementById("setJamMingguan").value = s.Jam_Notif_Mingguan || "8, 13";
+      document.getElementById("setJamBulanan").value = s.Jam_Notif_Bulanan || "8, 13";
+      document.getElementById("setJamTambahan").value = s.Jam_Notif_Tambahan || "8";
+      document.getElementById("setHMingguan").value = s.H_Min_Mingguan || 2;
+      document.getElementById("setHBulanan").value = s.H_Min_Bulanan || 2;
+      document.getElementById("setHTambahan").value = s.H_Min_Tambahan || 2;
+    }
+
+    function populatePIC(pics) {
+      const sel = document.getElementById("inPIC");
+      sel.innerHTML = "";
+      pics.forEach(p => { sel.innerHTML += `<option value="${escapeHtml(p.username)}">${escapeHtml(p.nama)}</option>`; });
+    }
+
+    async function updateStatus(cb, idTask) {
+      const tr = cb.closest('tr');
+      cb.checked ? tr.classList.add('selesai') : tr.classList.remove('selesai');
+      await callAPI({ action: "updateStatus", ID_Task: idTask, Status: cb.checked ? "Selesai" : "Belum" });
+      loadData();
+    }
+
+    function handleTipeChange() {
+      const tipe = document.getElementById('inTipe').value;
+      const wrapDeadline = document.getElementById('deadlineWrapper');
+      const wrapMulai = document.getElementById('tglMulaiWrapper');
+      const wrapProgress = document.getElementById('progressWrapper');
+      const container = document.getElementById('deadlineInputContainer');
+      if (tipe === "Harian") {
+        wrapDeadline.style.display = "none"; wrapMulai.style.display = "none"; wrapProgress.style.display = "none";
+        container.innerHTML = `<input type="hidden" id="inDeadline" value="-">`;
+      } else {
+        wrapDeadline.style.display = "block";
+        if (tipe === "Mingguan") container.innerHTML = `<select id="inDeadline" required><option>Senin</option><option>Selasa</option><option>Rabu</option><option>Kamis</option><option>Jumat</option><option>Sabtu</option><option>Minggu</option></select>`;
+        else if (tipe === "Bulanan") container.innerHTML = `<input type="number" id="inDeadline" min="1" max="31" placeholder="Tgl (1-31)" required>`;
+        else container.innerHTML = `<input type="date" id="inDeadline" required>`;
+        if (tipe === "Tambahan") { wrapMulai.style.display = "block"; wrapProgress.style.display = "block"; }
+        else { wrapMulai.style.display = "none"; wrapProgress.style.display = "none"; }
+      }
+    }
+
+    function openModal(id) {
+      document.getElementById(id).style.display = 'flex';
+      if (id === 'taskModal') {
+        if (!globalUser || globalUser.role !== 'Admin') { closeModal(id); showToast('Hanya Admin yang boleh menambah atau mengedit tugas.'); return; }
+        document.getElementById('taskForm').reset();
+        document.getElementById('inIdTask').value = "";
+        document.getElementById('modalTitle').innerText = "Buat Tugas Baru";
+        document.getElementById('btnDelTask').style.display = "none";
+        handleTipeChange();
+      }
+      if (id === 'userModal') {
+        document.getElementById('userForm').reset();
+        document.getElementById('userModalTitle').innerText = "Tambah User PIC";
+        document.getElementById('inUName').readOnly = false;
+      }
+    }
+
+    function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+
+    async function submitTask() {
+      const idTask = document.getElementById('inIdTask').value;
+      const btn = document.getElementById('saveBtn');
+      btn.innerText = "Memproses...";
+      btn.disabled = true;
+      const res = await callAPI({
+        action: idTask !== "" ? "editTask" : "addTask",
+        ID_Task: idTask,
+        Deskripsi: document.getElementById('inDeskripsi').value,
+        Tipe: document.getElementById('inTipe').value,
+        Deadline: document.getElementById('inDeadline').value,
+        PIC: document.getElementById('inPIC').value,
+        Tgl_Mulai: document.getElementById('inTglMulai').value,
+        Progress: document.getElementById('inProgress').value
+      });
+      if (res && res.status === "success") {
+        closeModal('taskModal');
+        loadData();
+        showToast("Tugas berhasil disimpan.");
+      }
+      btn.innerText = "Simpan";
+      btn.disabled = false;
+    }
+
+    function editTask(id) {
+      if (!globalUser || globalUser.role !== 'Admin') { showToast('Hanya Admin yang boleh mengedit tugas.'); return; }
+      const t = globalTasks.find(x => x.ID_Task === id);
+      if (!t) return;
+      document.getElementById('inIdTask').value = t.ID_Task;
+      document.getElementById('inDeskripsi').value = t.Deskripsi;
+      document.getElementById('inTipe').value = t.Tipe;
+      handleTipeChange();
+      document.getElementById('inDeadline').value = t.Deadline;
+      document.getElementById('inPIC').value = t.PIC;
+      if (t.Tipe === "Tambahan") {
+        document.getElementById('inTglMulai').value = t.Tgl_Mulai;
+        document.getElementById('inProgress').value = t.Progress;
+      }
+      document.getElementById('modalTitle').innerText = "Edit Tugas";
+      document.getElementById('btnDelTask').style.display = "block";
+      document.getElementById('taskModal').style.display = 'flex';
+    }
+
+    async function executeDeleteTask() {
+      const id = document.getElementById('inIdTask').value;
+      const ok = await customConfirm("Yakin hapus tugas ini secara permanen?", "🗑️");
+      if (!ok) return;
+      closeModal('taskModal');
+      await callAPI({ action: "deleteTask", ID_Task: id });
+      loadData();
+      showToast("Tugas dihapus.");
+    }
+
+    async function submitUser() {
+      const btn = document.getElementById('saveUserBtn');
+      btn.innerText = "Memproses...";
+      btn.disabled = true;
+      const usr = {
+        username: document.getElementById('inUName').value,
+        password: document.getElementById('inUPass').value,
+        role: document.getElementById('inURole').value,
+        nama: document.getElementById('inUFullName').value,
+        wa: document.getElementById('inUWA').value,
+        email: document.getElementById('inUEmail').value
+      };
+      await callAPI({ action: "saveUser", user: usr });
+      closeModal('userModal');
+      loadData();
+      btn.innerText = "Simpan";
+      btn.disabled = false;
+      showToast("Data User tersimpan.");
+    }
+
+    function editUser(uname) {
+      const u = globalUsers.find(x => x.username === uname);
+      if (!u) return;
+      document.getElementById('inUName').value = u.username;
+      document.getElementById('inUName').readOnly = true;
+      document.getElementById('inUPass').value = '';
+      document.getElementById('inUPass').placeholder = 'Isi password baru';
+      document.getElementById('inUFullName').value = u.nama;
+      document.getElementById('inURole').value = u.role;
+      document.getElementById('inUWA').value = u.wa;
+      document.getElementById('inUEmail').value = u.email;
+      document.getElementById('userModalTitle').innerText = "Edit User (Klik Simpan)";
+      document.getElementById('userModal').style.display = 'flex';
+    }
+
+    async function deleteUser(uname) {
+      if (uname === 'admin') { showToast("Admin utama tidak boleh dihapus."); return; }
+      const ok = await customConfirm(`Hapus permanen user ${uname}?`, "⚠️");
+      if (!ok) return;
+      await callAPI({ action: "deleteUser", username: uname });
+      loadData();
+      showToast("User dihapus.");
+    }
+
+    async function saveSettings(e) {
+      e.preventDefault();
+      const btn = e.target.querySelector('button[type="submit"]');
+      btn.innerText = "Menerapkan...";
+      btn.disabled = true;
+      await callAPI({ action: "saveSettings", settings: {
+        Token_Fonnte: document.getElementById("setToken").value,
+        No_WA_Admin: document.getElementById("setAdminWA").value,
+        Gunakan_WA: document.getElementById("setGunakanWA").value,
+        Gunakan_Email: document.getElementById("setGunakanEmail").value,
+        Jam_Notif_Harian: document.getElementById("setJamHarian").value,
+        Jam_Notif_Mingguan: document.getElementById("setJamMingguan").value,
+        Jam_Notif_Bulanan: document.getElementById("setJamBulanan").value,
+        Jam_Notif_Tambahan: document.getElementById("setJamTambahan").value,
+        H_Min_Mingguan: document.getElementById("setHMingguan").value,
+        H_Min_Bulanan: document.getElementById("setHBulanan").value,
+        H_Min_Tambahan: document.getElementById("setHTambahan").value
+      }});
+      showToast("Pengaturan tersimpan.");
+      btn.innerText = "Terapkan Pengaturan";
+      btn.disabled = false;
+      loadData();
+    }
+
+    async function aktivasiTrigger() {
+      const btn = document.getElementById('btnTrigger');
+      btn.innerText = "Memproses...";
+      btn.disabled = true;
+      try {
+        const res = await callAPI({ action: "setupTriggers" });
+        showToast(res.message || (res.status === "success" ? "Trigger berhasil diaktifkan!" : "Gagal."));
+      } catch(e) { showToast("Gagal mengaktifkan trigger."); }
+      btn.innerText = "⚡ Aktifkan Trigger Otomatis";
+      btn.disabled = false;
+    }
+
+    async function testNotif(channel) {
+      const btnId = channel === 'wa' ? 'btnTestWA' : 'btnTestEmail';
+      const btn = document.getElementById(btnId);
+      btn.innerText = "Mengirim...";
+      btn.disabled = true;
+      const me = globalUsers.find(u => u.username === globalUser.username);
+      const target = channel === 'wa' ? (me && me.wa) : (me && me.email);
+      try {
+        const res = await callAPI({ action: "testNotif", channel, target });
+        showToast(res.message || (res.status === "success" ? "Berhasil dikirim!" : "Gagal."));
+      } catch(e) { showToast("Gagal mengirim test notifikasi."); }
+      btn.innerText = channel === 'wa' ? "📱 Test WA" : "📧 Test Email";
+      btn.disabled = false;
+    }
+
+
+    let deferredInstallPrompt = null;
+    window.addEventListener('beforeinstallprompt', (event) => {
+      event.preventDefault();
+      deferredInstallPrompt = event;
+      const btn = document.getElementById('installAppBtn');
+      if (btn) btn.style.display = 'inline-block';
+    });
+    async function installPWA() {
+      const btn = document.getElementById('installAppBtn');
+      if (!deferredInstallPrompt) { showToast('Jika tombol install belum muncul, gunakan menu browser: Add to Home Screen / Install App.'); return; }
+      deferredInstallPrompt.prompt();
+      const choice = await deferredInstallPrompt.userChoice;
+      deferredInstallPrompt = null;
+      if (btn) btn.style.display = 'none';
+      if (choice && choice.outcome === 'accepted') showToast('Aplikasi berhasil dipasang.');
+    }
+    window.addEventListener('appinstalled', () => { const btn = document.getElementById('installAppBtn'); if (btn) btn.style.display = 'none'; deferredInstallPrompt = null; });
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(err => console.warn('Service worker gagal:', err)));
+    }
+
+  </script>
+</body>
+</html>
