@@ -2,18 +2,20 @@ const SHEET_ID = "1qES2JP7cE0g0gNWD1mb6-T0r2frgtYrR2th9fI4FU1s";
 const APP_TZ = "Asia/Jayapura";
 const ROLES = { ADMIN: "Admin", PIC: "PIC" };
 const TASK_TYPES = ["Harian", "Mingguan", "Bulanan", "Tambahan"];
+const DATA_SHEETS = ["Harian", "Mingguan", "Bulanan", "Tambahan", "Overdue"];
 const WEEK_DAYS = { "Minggu": 0, "Senin": 1, "Selasa": 2, "Rabu": 3, "Kamis": 4, "Jumat": 5, "Sabtu": 6 };
 
 function setupTemplate() {
   const ss = SpreadsheetApp.openById(SHEET_ID);
-  const kategori = ["Harian", "Mingguan", "Bulanan", "Tambahan"];
+  const kategori = DATA_SHEETS;
 
   kategori.forEach(kat => {
     let sh = ss.getSheetByName(kat);
     if (!sh) sh = ss.insertSheet(kat);
     if (sh.getLastRow() === 0) {
-      sh.getRange("A1:H1").setValues([["ID_Task", "Deskripsi", "Tipe", "Deadline", "Username_PIC", "Status", "Tanggal_Mulai", "Progress"]]);
+      sh.getRange("A1:J1").setValues([["ID_Task", "Deskripsi", "Tipe", "Deadline", "Username_PIC", "Status", "Tanggal_Mulai", "Progress", "Original_ID", "Periode_Key"]]);
     }
+    if (sh.getLastColumn() < 10) sh.getRange(1, 9, 1, 2).setValues([["Original_ID", "Periode_Key"]]);
   });
 
   let shRekap = ss.getSheetByName("Rekapan");
@@ -249,6 +251,37 @@ function cleanupCompletedTambahan_(ss, todayYmd) {
   }
 }
 
+function addDays_(d, n) {
+  const x = new Date(d);
+  x.setDate(x.getDate() + n);
+  return x;
+}
+
+function ensureOverdueSheet_(ss) {
+  let sh = ss.getSheetByName("Overdue");
+  if (!sh) sh = ss.insertSheet("Overdue");
+  if (sh.getLastRow() === 0) {
+    sh.getRange("A1:J1").setValues([["ID_Task", "Deskripsi", "Tipe", "Deadline", "Username_PIC", "Status", "Tanggal_Mulai", "Progress", "Original_ID", "Periode_Key"]]);
+  }
+  if (sh.getLastColumn() < 10) sh.getRange(1, 9, 1, 2).setValues([["Original_ID", "Periode_Key"]]);
+  return sh;
+}
+
+function overdueExists_(shOverdue, periodeKey) {
+  if (!shOverdue || shOverdue.getLastRow() < 2) return false;
+  return shOverdue.getRange(2, 10, shOverdue.getLastRow() - 1, 1).getValues().flat().map(String).includes(String(periodeKey));
+}
+
+function createOverdueTask_(ss, sourceRow, dueYmd, label) {
+  const shOverdue = ensureOverdueSheet_(ss);
+  const originalId = String(sourceRow[0] || "");
+  if (!originalId) return;
+  const periodeKey = `${originalId}_${dueYmd}`;
+  if (overdueExists_(shOverdue, periodeKey)) return;
+  shOverdue.appendRow([`OVD-${originalId}-${dueYmd}`, sourceRow[1], sourceRow[2], dueYmd, sourceRow[4], "Belum", dueYmd, `OVERDUE ${label || dueYmd}`, originalId, periodeKey]);
+}
+
+
 function formatTanggal(val) {
   if (!val) return { form: "-", tampil: "-" };
   let formStr = val.toString();
@@ -309,7 +342,7 @@ function prosesAPI(payload) {
     if (action === "getData") {
       const todayDateStr = Utilities.formatDate(new Date(), APP_TZ, "dd/MM/yyyy");
       const todayYmd = Utilities.formatDate(new Date(), APP_TZ, "yyyy-MM-dd");
-      cleanupCompletedTambahan_(ss, todayYmd);
+      // Jangan cleanup tugas tambahan saat getData, agar setelah diceklis tetap terlihat sampai hari berganti.
       const shRekap = ss.getSheetByName("Rekapan");
       let completedTodayIds = [];
       const rekapDataReturn = [];
@@ -332,7 +365,7 @@ function prosesAPI(payload) {
         }
       }
 
-      const kategori = ["Harian", "Mingguan", "Bulanan", "Tambahan"];
+      const kategori = DATA_SHEETS;
       let tasksRaw = [];
       kategori.forEach(kat => {
         const sh = ss.getSheetByName(kat);
@@ -371,7 +404,10 @@ function prosesAPI(payload) {
           Nama_PIC: userNamesMap[d[4]],
           Status: d[5],
           Tgl_Mulai: tglMulai.form,
-          Progress: d[7] || ""
+          Progress: d[7] || "",
+          Is_Overdue: String(d[0] || "").indexOf("OVD-") === 0 || !!d[8],
+          Original_ID: d[8] || "",
+          Periode_Key: d[9] || ""
         };
       });
 
@@ -403,11 +439,13 @@ function prosesAPI(payload) {
     }
 
     if (action === "addTask") {
-      requireAdmin_(ss, payload);
+      const currentUser = getUserByUsername_(ss, payload.sessionUsername || payload.username);
+      if (!currentUser) return { status: "error", message: "Sesi user tidak valid." };
+      if (currentUser.role !== "Admin") payload.PIC = currentUser.username;
       const err = validateTaskPayload_(payload);
       if (err) return { status: "error", message: err };
       const deadline = payload.Tipe === "Harian" ? "-" : payload.Deadline;
-      ss.getSheetByName(payload.Tipe).appendRow(["TSK-" + new Date().getTime(), String(payload.Deskripsi).trim(), payload.Tipe, deadline, payload.PIC, "Belum", payload.Tgl_Mulai || "", payload.Progress || ""]);
+      ss.getSheetByName(payload.Tipe).appendRow(["TSK-" + new Date().getTime(), String(payload.Deskripsi).trim(), payload.Tipe, deadline, payload.PIC, "Belum", payload.Tgl_Mulai || "", payload.Progress || "", "", ""]);
       SpreadsheetApp.flush();
       return { status: "success" };
     }
@@ -415,7 +453,7 @@ function prosesAPI(payload) {
     if (action === "updateStatus") {
       const currentUser = getUserByUsername_(ss, payload.sessionUsername || payload.username);
       if (!["Selesai", "Belum"].includes(String(payload.Status))) return { status: "error", message: "Status tidak valid." };
-      const kategori = ["Harian", "Mingguan", "Bulanan", "Tambahan"];
+      const kategori = DATA_SHEETS;
       for (let k = 0; k < kategori.length; k++) {
         const sh = ss.getSheetByName(kategori[k]);
         const data = sh.getDataRange().getValues();
@@ -454,19 +492,23 @@ function prosesAPI(payload) {
     }
 
     if (action === "editTask") {
-      requireAdmin_(ss, payload);
+      const currentUser = getUserByUsername_(ss, payload.sessionUsername || payload.username);
+      if (!currentUser) return { status: "error", message: "Sesi user tidak valid." };
+      if (String(payload.ID_Task || "").indexOf("OVD-") === 0) return { status: "error", message: "Tugas overdue tidak dapat diedit. Selesaikan atau edit tugas asalnya." };
+      if (currentUser.role !== "Admin") payload.PIC = currentUser.username;
       const err = validateTaskPayload_(payload);
       if (err) return { status: "error", message: err };
-      const kategori = ["Harian", "Mingguan", "Bulanan", "Tambahan"];
+      const kategori = DATA_SHEETS;
       for (let k = 0; k < kategori.length; k++) {
         const sh = ss.getSheetByName(kategori[k]);
         const data = sh.getDataRange().getValues();
         for (let i = 1; i < data.length; i++) {
           if (data[i][0] == payload.ID_Task) {
+            if (!canAccessTask_(currentUser, data[i][4])) return { status: "error", message: "Anda tidak berwenang mengedit tugas ini." };
             const deadline = payload.Tipe === "Harian" ? "-" : payload.Deadline;
             if (data[i][2] !== payload.Tipe) {
               sh.deleteRow(i + 1);
-              ss.getSheetByName(payload.Tipe).appendRow([payload.ID_Task, String(payload.Deskripsi).trim(), payload.Tipe, deadline, payload.PIC, data[i][5], payload.Tgl_Mulai || "", payload.Progress || ""]);
+              ss.getSheetByName(payload.Tipe).appendRow([payload.ID_Task, String(payload.Deskripsi).trim(), payload.Tipe, deadline, payload.PIC, data[i][5], payload.Tgl_Mulai || "", payload.Progress || "", data[i][8] || "", data[i][9] || ""]);
             } else {
               sh.getRange(i + 1, 2, 1, 4).setValues([[String(payload.Deskripsi).trim(), payload.Tipe, deadline, payload.PIC]]);
               sh.getRange(i + 1, 7, 1, 2).setValues([[payload.Tgl_Mulai || "", payload.Progress || ""]]);
@@ -644,11 +686,13 @@ function resetTugasBerulang() {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const kategori = ["Harian", "Mingguan", "Bulanan"];
   const now = new Date();
-  const yesterday = new Date(now);
-  yesterday.setDate(yesterday.getDate() - 1);
+  const todayYmd = Utilities.formatDate(now, APP_TZ, "yyyy-MM-dd");
+  const yesterday = addDays_(now, -1);
+  const yesterdayYmd = Utilities.formatDate(yesterday, APP_TZ, "yyyy-MM-dd");
   const yestDay = parseInt(Utilities.formatDate(yesterday, APP_TZ, "u")) % 7;
   const yestDate = parseInt(Utilities.formatDate(yesterday, APP_TZ, "d"));
   const mapHari = { "Minggu": 0, "Senin": 1, "Selasa": 2, "Rabu": 3, "Kamis": 4, "Jumat": 5, "Sabtu": 6 };
+
   kategori.forEach(kat => {
     const sh = ss.getSheetByName(kat);
     if (!sh) return;
@@ -657,14 +701,20 @@ function resetTugasBerulang() {
       const tipe = data[i][2];
       const deadline = data[i][3];
       const status = data[i][5];
-      if (status !== "Selesai") continue;
-      let reset = false;
-      if (tipe === "Harian") reset = true;
-      else if (tipe === "Mingguan" && mapHari[deadline] === yestDay) reset = true;
-      else if (tipe === "Bulanan" && parseInt(deadline) === yestDate) reset = true;
-      if (reset) sh.getRange(i + 1, 6).setValue("Belum");
+      let periodeLewat = false;
+      if (tipe === "Harian") periodeLewat = true;
+      else if (tipe === "Mingguan" && mapHari[deadline] === yestDay) periodeLewat = true;
+      else if (tipe === "Bulanan" && parseInt(deadline, 10) === yestDate) periodeLewat = true;
+      if (!periodeLewat) continue;
+
+      if (status !== "Selesai") createOverdueTask_(ss, data[i], yesterdayYmd, Utilities.formatDate(yesterday, APP_TZ, "dd/MM/yyyy"));
+      if (status === "Selesai") sh.getRange(i + 1, 6).setValue("Belum");
     }
   });
+
+  // Tugas tambahan yang sudah selesai baru dihapus mulai hari berikutnya.
+  cleanupCompletedTambahan_(ss, todayYmd);
+  SpreadsheetApp.flush();
 }
 
 function prosesReminder() {
@@ -694,12 +744,13 @@ function prosesReminder() {
   const hariIniLocal = new Date(Utilities.formatDate(now, APP_TZ, "yyyy-MM-dd") + "T00:00:00");
   const mapHari = { "Minggu": 0, "Senin": 1, "Selasa": 2, "Rabu": 3, "Kamis": 4, "Jumat": 5, "Sabtu": 6 };
 
-  ["Harian", "Mingguan", "Bulanan", "Tambahan"].forEach(kat => {
+  DATA_SHEETS.forEach(kat => {
     const sh = ss.getSheetByName(kat);
     if (!sh) return;
     const dataTasks = sh.getDataRange().getValues();
     for (let i = 1; i < dataTasks.length; i++) {
       const [id, deskripsi, tipe, deadline, pic, status] = dataTasks[i];
+      const isOverdueTask = kat === "Overdue" || String(id || "").indexOf("OVD-") === 0;
       if (status === "Selesai" || !userMap[pic]) continue;
       const jamNotifValid = (set[`Jam_Notif_${tipe}`] || "8").toString().split(",").map(s => parseInt(s.trim())).filter(n => !isNaN(n));
       if (!jamNotifValid.includes(jamSekarang)) continue;
@@ -733,7 +784,7 @@ function prosesReminder() {
         tglStr = Utilities.formatDate(deadlineObj, APP_TZ, "dd/MM/yyyy");
       }
 
-      let harusKirim = tipe === "Harian";
+      let harusKirim = isOverdueTask || tipe === "Harian";
       if (tipe !== "Harian") {
         const hMin = parseInt(set[`H_Min_${tipe}`]) || 2;
         if ((selisihHari > 0 && selisihHari <= hMin) || isHariH || selisihHari < 0) harusKirim = true;

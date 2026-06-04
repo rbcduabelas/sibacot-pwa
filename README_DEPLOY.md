@@ -1,9 +1,13 @@
-# SIBACOT GitHub Pages + PWA
+# SIBACOT GitHub PWA - Upgrade Trial Day 1
 
-Hotfix ini memperbaiki tampilan GitHub Pages yang terbaca desktop mode dengan menambahkan viewport langsung di `docs/index.html`, serta memperbaiki logout logo kanan atas dengan `onclick="handleLogoTap()"` langsung pada elemen logo.
+Perbaikan:
+- loading awal dibuat lebih halus agar tidak kedap-kedip;
+- PIC dapat menambahkan tugas;
+- PIC dapat edit tugas miliknya;
+- tugas tambahan selesai baru dibersihkan oleh reset harian hari berikutnya;
+- overdue dibuat pada sheet `Overdue` saat reset harian jika tugas berulang belum selesai;
+- manifest PWA diperkuat dengan `id`, `display_override`, dan `prefer_related_applications:false`.
 
-## Cara update
-1. Upload/replace isi folder `docs` ke repo GitHub Bapak.
-2. Paste `gas/Code.gs` ke Apps Script jika ingin sinkron dengan versi backend terbaru.
-3. Pastikan `docs/config.js` berisi URL Web App GAS.
-4. Jika tampilan masih lama, buka browser incognito atau clear site data/service worker, karena PWA bisa menyimpan cache lama.
+Catatan Huawei/tablet: jika tetap menjadi shortcut Chrome, biasanya disebabkan WebAPK tidak berhasil dibuat oleh browser/perangkat. Kode manifest sudah diperkuat, tetapi perilaku akhir tetap tergantung dukungan browser/perangkat.
+
+Setelah upload ke GitHub, clear cache/service worker lama atau buka incognito karena cache PWA bisa menahan versi lama.

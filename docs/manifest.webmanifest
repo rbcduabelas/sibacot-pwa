@@ -1,13 +1,20 @@
 {
+  "id": "./",
   "name": "SIBACOT - Ko Seklis Dolo",
   "short_name": "SIBACOT",
   "description": "Sistem Manajemen dan Checklist Tugas Terpadu",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
+  "display_override": [
+    "standalone",
+    "minimal-ui",
+    "browser"
+  ],
   "background_color": "#F0F4F8",
   "theme_color": "#011F7B",
   "orientation": "portrait-primary",
+  "prefer_related_applications": false,
   "icons": [
     {
       "src": "icons/icon-192.png",
