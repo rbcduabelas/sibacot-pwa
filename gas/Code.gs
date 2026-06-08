@@ -281,6 +281,95 @@ function createOverdueTask_(ss, sourceRow, dueYmd, label) {
   shOverdue.appendRow([`OVD-${originalId}-${dueYmd}`, sourceRow[1], sourceRow[2], dueYmd, sourceRow[4], "Belum", dueYmd, `OVERDUE ${label || dueYmd}`, originalId, periodeKey]);
 }
 
+function toYmd_(val) {
+  if (!val) return "";
+  if (val instanceof Date) return Utilities.formatDate(val, APP_TZ, "yyyy-MM-dd");
+  const s = String(val).trim();
+  let m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+  m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+  if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+  return "";
+}
+function ymdToDate_(ymd) {
+  const p = String(ymd || "").split("-").map(Number);
+  if (p.length !== 3 || p.some(isNaN)) return null;
+  return new Date(p[0], p[1] - 1, p[2]);
+}
+function getIsoDayFromDate_(d) {
+  const n = parseInt(Utilities.formatDate(d, APP_TZ, "u"), 10);
+  return n === 7 ? 7 : n;
+}
+function getIsoDayFromName_(namaHari) {
+  const map = { "Senin": 1, "Selasa": 2, "Rabu": 3, "Kamis": 4, "Jumat": 5, "Sabtu": 6, "Minggu": 7 };
+  return map[String(namaHari || "")] || 0;
+}
+function daysInMonth_(year, month1Based) { return new Date(year, month1Based, 0).getDate(); }
+function isHolidayYmd_(ss, ymd) {
+  const sh = ss.getSheetByName("Holidays");
+  if (!sh || sh.getLastRow() < 2) return false;
+  const vals = sh.getRange(2, 1, sh.getLastRow() - 1, 1).getValues();
+  for (let i = 0; i < vals.length; i++) if (bacaTanggalLibur(vals[i][0]) === ymd) return true;
+  return false;
+}
+function endOfMonthYmd_(ymd) {
+  const d = ymdToDate_(ymd);
+  if (!d) return "";
+  return Utilities.formatDate(new Date(d.getFullYear(), d.getMonth() + 1, 0), APP_TZ, "yyyy-MM-dd");
+}
+function shouldShowTaskForPeriod_(row, today, todayYmd, isTodayHoliday) {
+  const id = String(row[0] || "");
+  const tipe = row[2];
+  const deadline = row[3];
+  const status = row[5];
+  const isOverdue = id.indexOf("OVD-") === 0 || !!row[8];
+  if (isOverdue) return true;
+  if (tipe === "Harian") return !isTodayHoliday;
+  if (tipe === "Mingguan") {
+    const todayIso = getIsoDayFromDate_(today);
+    const targetIso = getIsoDayFromName_(deadline);
+    if (!targetIso) return true;
+    if (status !== "Selesai" && todayIso > targetIso) return false;
+    return true;
+  }
+  if (tipe === "Bulanan") {
+    const dayNow = parseInt(Utilities.formatDate(today, APP_TZ, "d"), 10);
+    const monthNow = parseInt(Utilities.formatDate(today, APP_TZ, "M"), 10);
+    const yearNow = parseInt(Utilities.formatDate(today, APP_TZ, "yyyy"), 10);
+    const targetDate = Math.min(parseInt(deadline, 10) || 1, daysInMonth_(yearNow, monthNow));
+    if (status !== "Selesai" && dayNow > targetDate) return false;
+    return true;
+  }
+  if (tipe === "Tambahan") {
+    const deadlineYmd = toYmd_(deadline);
+    if (!deadlineYmd) return true;
+    if (status === "Selesai") {
+      const endYmd = endOfMonthYmd_(deadlineYmd);
+      return !endYmd || todayYmd <= endYmd;
+    }
+    return true;
+  }
+  return true;
+}
+function cleanupAndMoveTambahan_(ss, todayYmd) {
+  const sh = ss.getSheetByName("Tambahan");
+  if (!sh || sh.getLastRow() < 2) return;
+  const data = sh.getDataRange().getValues();
+  for (let i = data.length - 1; i >= 1; i--) {
+    const status = data[i][5];
+    const deadlineYmd = toYmd_(data[i][3]);
+    if (!deadlineYmd) continue;
+    if (status === "Selesai") {
+      const endYmd = endOfMonthYmd_(deadlineYmd);
+      if (endYmd && todayYmd > endYmd) sh.deleteRow(i + 1);
+    } else if (deadlineYmd < todayYmd) {
+      createOverdueTask_(ss, data[i], deadlineYmd, formatTanggal(data[i][3]).tampil);
+      sh.deleteRow(i + 1);
+    }
+  }
+}
+
+
 
 function formatTanggal(val) {
   if (!val) return { form: "-", tampil: "-" };
@@ -340,9 +429,11 @@ function prosesAPI(payload) {
     }
 
     if (action === "getData") {
-      const todayDateStr = Utilities.formatDate(new Date(), APP_TZ, "dd/MM/yyyy");
-      const todayYmd = Utilities.formatDate(new Date(), APP_TZ, "yyyy-MM-dd");
-      // Jangan cleanup tugas tambahan saat getData, agar setelah diceklis tetap terlihat sampai hari berganti.
+      const nowGetData = new Date();
+      const todayDateStr = Utilities.formatDate(nowGetData, APP_TZ, "dd/MM/yyyy");
+      const todayYmd = Utilities.formatDate(nowGetData, APP_TZ, "yyyy-MM-dd");
+      const isTodayHoliday = isHolidayYmd_(ss, todayYmd);
+      // Jangan cleanup tugas tambahan saat getData, agar setelah diceklis tetap terlihat sampai periode tampilnya selesai.
       const shRekap = ss.getSheetByName("Rekapan");
       let completedTodayIds = [];
       const rekapDataReturn = [];
@@ -377,6 +468,7 @@ function prosesAPI(payload) {
           let status = data[i][5];
           // Jangan reset status di getData. Reset hanya oleh trigger resetTugasBerulang saat periode berganti.
           // Semua user PIC dapat melihat seluruh tugas. Hak update tetap dibatasi pada action updateStatus.
+          if (!shouldShowTaskForPeriod_(data[i], nowGetData, todayYmd, isTodayHoliday)) continue;
           tasksRaw.push(data[i]);
         }
       });
@@ -405,7 +497,7 @@ function prosesAPI(payload) {
           Status: d[5],
           Tgl_Mulai: tglMulai.form,
           Progress: d[7] || "",
-          Is_Overdue: String(d[0] || "").indexOf("OVD-") === 0 || !!d[8],
+          Is_Overdue: String(d[0] || "").indexOf("OVD-") === 0 || !!d[8] || (d[2] === "Tambahan" && d[5] !== "Selesai" && toYmd_(d[3]) && toYmd_(d[3]) < todayYmd),
           Original_ID: d[8] || "",
           Periode_Key: d[9] || ""
         };
@@ -523,7 +615,7 @@ function prosesAPI(payload) {
 
     if (action === "deleteTask") {
       requireAdmin_(ss, payload);
-      const kategori = ["Harian", "Mingguan", "Bulanan", "Tambahan"];
+      const kategori = DATA_SHEETS;
       for (let k = 0; k < kategori.length; k++) {
         const sh = ss.getSheetByName(kategori[k]);
         const data = sh.getDataRange().getValues();
@@ -684,36 +776,57 @@ function prosesAPI(payload) {
 
 function resetTugasBerulang() {
   const ss = SpreadsheetApp.openById(SHEET_ID);
-  const kategori = ["Harian", "Mingguan", "Bulanan"];
+  ensureOverdueSheet_(ss);
   const now = new Date();
   const todayYmd = Utilities.formatDate(now, APP_TZ, "yyyy-MM-dd");
   const yesterday = addDays_(now, -1);
   const yesterdayYmd = Utilities.formatDate(yesterday, APP_TZ, "yyyy-MM-dd");
-  const yestDay = parseInt(Utilities.formatDate(yesterday, APP_TZ, "u")) % 7;
-  const yestDate = parseInt(Utilities.formatDate(yesterday, APP_TZ, "d"));
-  const mapHari = { "Minggu": 0, "Senin": 1, "Selasa": 2, "Rabu": 3, "Kamis": 4, "Jumat": 5, "Sabtu": 6 };
+  const todayIso = getIsoDayFromDate_(now);
+  const yestIso = getIsoDayFromDate_(yesterday);
+  const todayDate = parseInt(Utilities.formatDate(now, APP_TZ, "d"), 10);
+  const yestDate = parseInt(Utilities.formatDate(yesterday, APP_TZ, "d"), 10);
+  const yestMonth = parseInt(Utilities.formatDate(yesterday, APP_TZ, "M"), 10);
+  const yestYear = parseInt(Utilities.formatDate(yesterday, APP_TZ, "yyyy"), 10);
+  const todayHoliday = isHolidayYmd_(ss, todayYmd);
+  const yesterdayHoliday = isHolidayYmd_(ss, yesterdayYmd);
 
-  kategori.forEach(kat => {
-    const sh = ss.getSheetByName(kat);
-    if (!sh) return;
-    const data = sh.getDataRange().getValues();
+  const shHarian = ss.getSheetByName("Harian");
+  if (shHarian && shHarian.getLastRow() >= 2) {
+    const data = shHarian.getDataRange().getValues();
     for (let i = 1; i < data.length; i++) {
-      const tipe = data[i][2];
-      const deadline = data[i][3];
       const status = data[i][5];
-      let periodeLewat = false;
-      if (tipe === "Harian") periodeLewat = true;
-      else if (tipe === "Mingguan" && mapHari[deadline] === yestDay) periodeLewat = true;
-      else if (tipe === "Bulanan" && parseInt(deadline, 10) === yestDate) periodeLewat = true;
-      if (!periodeLewat) continue;
-
-      if (status !== "Selesai") createOverdueTask_(ss, data[i], yesterdayYmd, Utilities.formatDate(yesterday, APP_TZ, "dd/MM/yyyy"));
-      if (status === "Selesai") sh.getRange(i + 1, 6).setValue("Belum");
+      if (!yesterdayHoliday) {
+        if (status !== "Selesai") createOverdueTask_(ss, data[i], yesterdayYmd, Utilities.formatDate(yesterday, APP_TZ, "dd/MM/yyyy"));
+        if (status === "Selesai") shHarian.getRange(i + 1, 6).setValue("Belum");
+      } else if (!todayHoliday && status === "Selesai") shHarian.getRange(i + 1, 6).setValue("Belum");
     }
-  });
+  }
 
-  // Tugas tambahan yang sudah selesai baru dihapus mulai hari berikutnya.
-  cleanupCompletedTambahan_(ss, todayYmd);
+  const shMingguan = ss.getSheetByName("Mingguan");
+  if (shMingguan && shMingguan.getLastRow() >= 2) {
+    const data = shMingguan.getDataRange().getValues();
+    for (let i = 1; i < data.length; i++) {
+      const deadlineIso = getIsoDayFromName_(data[i][3]);
+      const status = data[i][5];
+      if (deadlineIso && deadlineIso === yestIso && status !== "Selesai") createOverdueTask_(ss, data[i], yesterdayYmd, Utilities.formatDate(yesterday, APP_TZ, "dd/MM/yyyy"));
+      if (todayIso === 1 && status === "Selesai") shMingguan.getRange(i + 1, 6).setValue("Belum");
+    }
+  }
+
+  const shBulanan = ss.getSheetByName("Bulanan");
+  if (shBulanan && shBulanan.getLastRow() >= 2) {
+    const data = shBulanan.getDataRange().getValues();
+    const lastDayYestMonth = daysInMonth_(yestYear, yestMonth);
+    for (let i = 1; i < data.length; i++) {
+      const rawTarget = parseInt(data[i][3], 10);
+      const targetDate = Math.min(isNaN(rawTarget) ? 1 : rawTarget, lastDayYestMonth);
+      const status = data[i][5];
+      if (targetDate === yestDate && status !== "Selesai") createOverdueTask_(ss, data[i], yesterdayYmd, Utilities.formatDate(yesterday, APP_TZ, "dd/MM/yyyy"));
+      if (todayDate === 1 && status === "Selesai") shBulanan.getRange(i + 1, 6).setValue("Belum");
+    }
+  }
+
+  cleanupAndMoveTambahan_(ss, todayYmd);
   SpreadsheetApp.flush();
 }
 
@@ -761,20 +874,20 @@ function prosesReminder() {
       if (tipe === "Harian") {
         selisihHari = 0;
         isHariH = true;
-        tglStr = "Hari ini";
+        tglStr = isOverdueTask ? `Overdue sejak ${formatTanggal(deadline).tampil}` : "Hari ini";
       } else if (tipe === "Mingguan") {
         const targetDay = mapHari[deadline];
         if (targetDay === undefined) continue;
         selisihHari = targetDay >= currDay ? targetDay - currDay : 7 - currDay + targetDay;
         isHariH = selisihHari === 0;
-        tglStr = `Setiap ${deadline}`;
+        tglStr = isOverdueTask ? `Overdue sejak ${formatTanggal(deadline).tampil}` : `Setiap ${deadline}`;
       } else if (tipe === "Bulanan") {
         const targetDate = parseInt(deadline);
         if (isNaN(targetDate)) continue;
         const daysInMonth = new Date(currYear, currMonth, 0).getDate();
         selisihHari = targetDate >= currDate ? targetDate - currDate : daysInMonth - currDate + targetDate;
         isHariH = selisihHari === 0;
-        tglStr = `Tanggal ${deadline} setiap bulan`;
+        tglStr = isOverdueTask ? `Overdue sejak ${formatTanggal(deadline).tampil}` : `Tanggal ${deadline} setiap bulan`;
       } else if (tipe === "Tambahan") {
         if (!deadline) continue;
         const deadlineObj = deadline instanceof Date ? deadline : new Date(String(deadline).substring(0, 10) + "T00:00:00");

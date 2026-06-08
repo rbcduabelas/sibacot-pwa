@@ -1,10 +1,8 @@
-# SIBACOT - Reupload Hotfix Aturan Periode & Overdue
+# SIBACOT FINAL HOTFIX PERIOD OVERDUE ZIP
 
-Isi file ini sama dengan hotfix aturan periode & overdue:
+Perbaikan:
 - Harian di hari libur tidak tampil dan tidak dibuat overdue.
-- Mingguan overdue setelah lewat tenggat; ceklis tetap sampai minggu baru.
-- Bulanan overdue setelah lewat tenggat; ceklis tetap sampai bulan baru.
-- Tambahan overdue setelah lewat tenggat; jika selesai tetap tampil sampai akhir bulan tenggat.
-- Service worker cache: sibacot-pwa-v4.
-
-File reupload disediakan sebagai ZIP yang disamarkan menjadi .txt. Setelah download, rename .txt menjadi .zip.
+- Mingguan overdue setelah lewat tenggat; tugas selesai tetap terceklis sampai minggu baru.
+- Bulanan overdue setelah lewat tenggat; tugas selesai tetap terceklis sampai bulan baru.
+- Tambahan lewat tenggat pindah overdue; tugas selesai tampil sampai akhir bulan tenggat.
+- Service worker: sibacot-pwa-v6.
