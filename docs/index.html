@@ -9,7 +9,9 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="SIBACOT">
   <link rel="manifest" href="manifest.webmanifest">
-  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-512.png">
+  <link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
   <style>
     :root {
       --corp-blue: #011F7B;
@@ -490,9 +492,6 @@
     #notifBanner button { background: var(--corp-gold); color: var(--corp-blue); padding: 5px 14px; font-size: 12px; border-radius: 20px; text-transform: none; letter-spacing: 0; font-weight: bold; }
     #notifBanner .notif-dismiss { background: transparent; color: #aaa; padding: 5px 8px; font-size: 18px; line-height: 1; }
     hr { border: none; border-top: 1px solid var(--border); margin: 15px 0; }
-  
-    /* HOTFIX PERIOD RULES V3 */
-    .period-note { display:block; margin-top:3px; color:var(--text-muted); font-size:10px; font-weight:600; }
   </style>
 </head>
 <body>
@@ -1215,9 +1214,9 @@
     function formatDeadlineRead(tipe, valForm, isOverdue) {
       if (isOverdue) return `<span style="color:#D32F2F; font-weight:bold;">OVERDUE ${formatCompactDate(valForm)}</span>`;
       if (tipe === "Harian") return `<span style="color:var(--corp-gold); font-weight:bold;">Tiap Hari</span>`;
-      if (tipe === "Mingguan") return `Tiap ${escapeHtml(valForm)}<span class="period-note">Tampil sampai minggu berganti bila sudah diceklis</span>`;
-      if (tipe === "Bulanan") return `Tgl ${escapeHtml(valForm)}<span class="period-note">Tampil sampai bulan berganti bila sudah diceklis</span>`;
-      return `${formatCompactDate(valForm)}<span class="period-note">Selesai tampil sampai akhir bulan tenggat</span>`;
+      if (tipe === "Mingguan") return `Tiap ${escapeHtml(valForm)}`;
+      if (tipe === "Bulanan") return `Tgl ${escapeHtml(valForm)}`;
+      return `${formatCompactDate(valForm)}`;
     }
 
     function renderTables(tasks) {

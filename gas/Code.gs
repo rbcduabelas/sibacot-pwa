@@ -281,6 +281,7 @@ function createOverdueTask_(ss, sourceRow, dueYmd, label) {
   shOverdue.appendRow([`OVD-${originalId}-${dueYmd}`, sourceRow[1], sourceRow[2], dueYmd, sourceRow[4], "Belum", dueYmd, `OVERDUE ${label || dueYmd}`, originalId, periodeKey]);
 }
 
+// === HOTFIX FINAL 08JUN: ATURAN PERIODE, HARI LIBUR, DAN OVERDUE ===
 function toYmd_(val) {
   if (!val) return "";
   if (val instanceof Date) return Utilities.formatDate(val, APP_TZ, "yyyy-MM-dd");
@@ -304,18 +305,23 @@ function getIsoDayFromName_(namaHari) {
   const map = { "Senin": 1, "Selasa": 2, "Rabu": 3, "Kamis": 4, "Jumat": 5, "Sabtu": 6, "Minggu": 7 };
   return map[String(namaHari || "")] || 0;
 }
-function daysInMonth_(year, month1Based) { return new Date(year, month1Based, 0).getDate(); }
+function daysInMonth_(year, month1Based) {
+  return new Date(year, month1Based, 0).getDate();
+}
 function isHolidayYmd_(ss, ymd) {
   const sh = ss.getSheetByName("Holidays");
   if (!sh || sh.getLastRow() < 2) return false;
   const vals = sh.getRange(2, 1, sh.getLastRow() - 1, 1).getValues();
-  for (let i = 0; i < vals.length; i++) if (bacaTanggalLibur(vals[i][0]) === ymd) return true;
+  for (let i = 0; i < vals.length; i++) {
+    if (bacaTanggalLibur(vals[i][0]) === ymd) return true;
+  }
   return false;
 }
 function endOfMonthYmd_(ymd) {
   const d = ymdToDate_(ymd);
   if (!d) return "";
-  return Utilities.formatDate(new Date(d.getFullYear(), d.getMonth() + 1, 0), APP_TZ, "yyyy-MM-dd");
+  const end = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+  return Utilities.formatDate(end, APP_TZ, "yyyy-MM-dd");
 }
 function shouldShowTaskForPeriod_(row, today, todayYmd, isTodayHoliday) {
   const id = String(row[0] || "");
@@ -324,12 +330,18 @@ function shouldShowTaskForPeriod_(row, today, todayYmd, isTodayHoliday) {
   const status = row[5];
   const isOverdue = id.indexOf("OVD-") === 0 || !!row[8];
   if (isOverdue) return true;
-  if (tipe === "Harian") return !isTodayHoliday;
+
+  if (tipe === "Harian") {
+    // Tugas harian tidak tampil di hari libur dan tidak dibuat overdue untuk hari libur.
+    return !isTodayHoliday;
+  }
   if (tipe === "Mingguan") {
     const todayIso = getIsoDayFromDate_(today);
     const targetIso = getIsoDayFromName_(deadline);
     if (!targetIso) return true;
+    // Jika sudah lewat tenggat minggu ini dan belum selesai, tugas aktif disembunyikan sampai minggu berikutnya.
     if (status !== "Selesai" && todayIso > targetIso) return false;
+    // Jika sudah selesai, tetap tampil terceklis sampai minggu baru.
     return true;
   }
   if (tipe === "Bulanan") {
@@ -337,13 +349,16 @@ function shouldShowTaskForPeriod_(row, today, todayYmd, isTodayHoliday) {
     const monthNow = parseInt(Utilities.formatDate(today, APP_TZ, "M"), 10);
     const yearNow = parseInt(Utilities.formatDate(today, APP_TZ, "yyyy"), 10);
     const targetDate = Math.min(parseInt(deadline, 10) || 1, daysInMonth_(yearNow, monthNow));
+    // Jika sudah lewat tenggat bulan ini dan belum selesai, tugas aktif disembunyikan sampai bulan berikutnya.
     if (status !== "Selesai" && dayNow > targetDate) return false;
+    // Jika sudah selesai, tetap tampil terceklis sampai bulan baru.
     return true;
   }
   if (tipe === "Tambahan") {
     const deadlineYmd = toYmd_(deadline);
     if (!deadlineYmd) return true;
     if (status === "Selesai") {
+      // Tugas tambahan selesai tetap tampil sampai akhir bulan dari tanggal tenggat.
       const endYmd = endOfMonthYmd_(deadlineYmd);
       return !endYmd || todayYmd <= endYmd;
     }
@@ -368,6 +383,7 @@ function cleanupAndMoveTambahan_(ss, todayYmd) {
     }
   }
 }
+// === END HOTFIX FINAL 08JUN ===
 
 
 
@@ -790,6 +806,7 @@ function resetTugasBerulang() {
   const todayHoliday = isHolidayYmd_(ss, todayYmd);
   const yesterdayHoliday = isHolidayYmd_(ss, yesterdayYmd);
 
+  // Harian: hari libur tidak dibuat overdue.
   const shHarian = ss.getSheetByName("Harian");
   if (shHarian && shHarian.getLastRow() >= 2) {
     const data = shHarian.getDataRange().getValues();
@@ -798,10 +815,13 @@ function resetTugasBerulang() {
       if (!yesterdayHoliday) {
         if (status !== "Selesai") createOverdueTask_(ss, data[i], yesterdayYmd, Utilities.formatDate(yesterday, APP_TZ, "dd/MM/yyyy"));
         if (status === "Selesai") shHarian.getRange(i + 1, 6).setValue("Belum");
-      } else if (!todayHoliday && status === "Selesai") shHarian.getRange(i + 1, 6).setValue("Belum");
+      } else if (!todayHoliday && status === "Selesai") {
+        shHarian.getRange(i + 1, 6).setValue("Belum");
+      }
     }
   }
 
+  // Mingguan: lewat tenggat menjadi overdue; selesai tetap terceklis sampai minggu baru.
   const shMingguan = ss.getSheetByName("Mingguan");
   if (shMingguan && shMingguan.getLastRow() >= 2) {
     const data = shMingguan.getDataRange().getValues();
@@ -813,6 +833,7 @@ function resetTugasBerulang() {
     }
   }
 
+  // Bulanan: lewat tenggat menjadi overdue; selesai tetap terceklis sampai bulan baru.
   const shBulanan = ss.getSheetByName("Bulanan");
   if (shBulanan && shBulanan.getLastRow() >= 2) {
     const data = shBulanan.getDataRange().getValues();
@@ -826,6 +847,7 @@ function resetTugasBerulang() {
     }
   }
 
+  // Tambahan: lewat tenggat pindah ke Overdue; selesai tampil sampai akhir bulan tenggat.
   cleanupAndMoveTambahan_(ss, todayYmd);
   SpreadsheetApp.flush();
 }
