@@ -1,3 +1,4 @@
+// HOTFIX 2026-07-02 OVERDUE CLEANUP + ADMIN EDIT OVERDUE
 const SHEET_ID = "1qES2JP7cE0g0gNWD1mb6-T0r2frgtYrR2th9fI4FU1s";
 const APP_TZ = "Asia/Jayapura";
 const ROLES = { ADMIN: "Admin", PIC: "PIC" };
@@ -383,6 +384,42 @@ function cleanupAndMoveTambahan_(ss, todayYmd) {
     }
   }
 }
+
+// === HOTFIX OVERDUE SELESAI: HAPUS SESUAI PERIODE ===
+function startOfWeekYmd_(ymd) {
+  const d = ymdToDate_(ymd);
+  if (!d) return "";
+  const iso = getIsoDayFromDate_(d); // Senin=1 ... Minggu=7
+  d.setDate(d.getDate() - (iso - 1));
+  return Utilities.formatDate(d, APP_TZ, "yyyy-MM-dd");
+}
+function monthKeyYmd_(ymd) {
+  return String(ymd || "").substring(0, 7);
+}
+function shouldDeleteCompletedOverdue_(tipe, completedYmd, todayYmd) {
+  if (!completedYmd || !todayYmd) return false;
+  if (tipe === "Harian") return completedYmd < todayYmd;
+  if (tipe === "Mingguan") return startOfWeekYmd_(completedYmd) < startOfWeekYmd_(todayYmd);
+  if (tipe === "Bulanan") return monthKeyYmd_(completedYmd) < monthKeyYmd_(todayYmd);
+  if (tipe === "Tambahan") return monthKeyYmd_(completedYmd) < monthKeyYmd_(todayYmd);
+  return completedYmd < todayYmd;
+}
+function cleanupCompletedOverdue_(ss, todayYmd) {
+  const sh = ss.getSheetByName("Overdue");
+  if (!sh || sh.getLastRow() < 2) return;
+  const completionMap = getLatestCompletionYmdMap_(ss);
+  const data = sh.getDataRange().getValues();
+  for (let i = data.length - 1; i >= 1; i--) {
+    const idTask = String(data[i][0] || "");
+    const tipe = String(data[i][2] || "");
+    const status = String(data[i][5] || "");
+    if (status !== "Selesai") continue;
+    const completedYmd = completionMap[idTask] || "";
+    if (shouldDeleteCompletedOverdue_(tipe, completedYmd, todayYmd)) sh.deleteRow(i + 1);
+  }
+}
+// === END HOTFIX OVERDUE SELESAI ===
+
 // === END HOTFIX FINAL 08JUN ===
 
 
@@ -602,19 +639,27 @@ function prosesAPI(payload) {
     if (action === "editTask") {
       const currentUser = getUserByUsername_(ss, payload.sessionUsername || payload.username);
       if (!currentUser) return { status: "error", message: "Sesi user tidak valid." };
-      if (String(payload.ID_Task || "").indexOf("OVD-") === 0) return { status: "error", message: "Tugas overdue tidak dapat diedit. Selesaikan atau edit tugas asalnya." };
+      const isOverduePayload = String(payload.ID_Task || "").indexOf("OVD-") === 0;
+      if (isOverduePayload && currentUser.role !== "Admin") return { status: "error", message: "Tugas overdue hanya dapat diedit oleh Admin." };
       if (currentUser.role !== "Admin") payload.PIC = currentUser.username;
       const err = validateTaskPayload_(payload);
       if (err) return { status: "error", message: err };
       const kategori = DATA_SHEETS;
       for (let k = 0; k < kategori.length; k++) {
         const sh = ss.getSheetByName(kategori[k]);
+        if (!sh) continue;
         const data = sh.getDataRange().getValues();
         for (let i = 1; i < data.length; i++) {
           if (data[i][0] == payload.ID_Task) {
-            if (!canAccessTask_(currentUser, data[i][4])) return { status: "error", message: "Anda tidak berwenang mengedit tugas ini." };
+            const rowIsOverdue = kategori[k] === "Overdue" || String(data[i][0] || "").indexOf("OVD-") === 0 || !!data[i][8];
+            if (rowIsOverdue && currentUser.role !== "Admin") return { status: "error", message: "Tugas overdue hanya dapat diedit oleh Admin." };
+            if (!rowIsOverdue && !canAccessTask_(currentUser, data[i][4])) return { status: "error", message: "Anda tidak berwenang mengedit tugas ini." };
             const deadline = payload.Tipe === "Harian" ? "-" : payload.Deadline;
-            if (data[i][2] !== payload.Tipe) {
+            if (rowIsOverdue) {
+              // Overdue tetap berada di sheet Overdue. Admin boleh mengubah uraian, tipe, deadline, PIC, mulai, dan progress.
+              sh.getRange(i + 1, 2, 1, 4).setValues([[String(payload.Deskripsi).trim(), payload.Tipe, deadline, payload.PIC]]);
+              sh.getRange(i + 1, 7, 1, 2).setValues([[payload.Tgl_Mulai || "", payload.Progress || ""]]);
+            } else if (data[i][2] !== payload.Tipe) {
               sh.deleteRow(i + 1);
               ss.getSheetByName(payload.Tipe).appendRow([payload.ID_Task, String(payload.Deskripsi).trim(), payload.Tipe, deadline, payload.PIC, data[i][5], payload.Tgl_Mulai || "", payload.Progress || "", data[i][8] || "", data[i][9] || ""]);
             } else {
@@ -628,7 +673,6 @@ function prosesAPI(payload) {
       }
       return { status: "error", message: "Tugas tidak ditemukan." };
     }
-
     if (action === "deleteTask") {
       requireAdmin_(ss, payload);
       const kategori = DATA_SHEETS;
@@ -849,6 +893,7 @@ function resetTugasBerulang() {
 
   // Tambahan: lewat tenggat pindah ke Overdue; selesai tampil sampai akhir bulan tenggat.
   cleanupAndMoveTambahan_(ss, todayYmd);
+  cleanupCompletedOverdue_(ss, todayYmd);
   SpreadsheetApp.flush();
 }
 
