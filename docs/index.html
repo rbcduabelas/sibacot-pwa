@@ -764,6 +764,7 @@
 
   <script src="config.js"></script>
   <script>
+    // HOTFIX 2026-07-02 ADMIN EDIT OVERDUE
     let globalTasks = [];
     let globalUsers = [];
     let globalUser = null;
@@ -1232,7 +1233,7 @@
             const isSelesai = t.Status === "Selesai" ? "checked" : "";
             const rClass = (t.Status === "Selesai" ? "selesai" : "") + (t.Is_Overdue ? " overdue-row" : "");
             const canCheck = (globalUser.username === t.PIC || globalUser.role === "Admin") ? "" : "disabled";
-            const canEdit = ((globalUser.username === t.PIC || globalUser.role === "Admin") && !t.Is_Overdue);
+            const canEdit = ((globalUser.username === t.PIC || globalUser.role === "Admin") && (!t.Is_Overdue || globalUser.role === "Admin"));
             const clickAction = canEdit ? `onclick="editTask('${escapeHtml(t.ID_Task)}')"` : ``;
             const editIcon = canEdit ? `<span class="edit-icon">✏️</span>` : ``;
             html += `<tr class="${rClass}"><td class="desc-text" ${clickAction}>${escapeHtml(t.Deskripsi)} ${t.Is_Overdue ? `<span class="overdue-badge">OVERDUE</span>` : ``} ${editIcon}</td><td>${formatCompactDate(t.Tgl_Mulai)}</td><td>${formatDeadlineRead(t.Tipe, t.Deadline, t.Is_Overdue)}</td><td>${escapeHtml(t.Progress || '-')}</td><td>${escapeHtml(t.Nama_PIC || t.PIC)}</td><td class="td-center"><input type="checkbox" onchange="updateStatus(this,'${escapeHtml(t.ID_Task)}')" ${isSelesai} ${canCheck}></td></tr>`;
@@ -1243,7 +1244,7 @@
             const isSelesai = t.Status === "Selesai" ? "checked" : "";
             const rClass = (t.Status === "Selesai" ? "selesai" : "") + (t.Is_Overdue ? " overdue-row" : "");
             const canCheck = (globalUser.username === t.PIC || globalUser.role === "Admin") ? "" : "disabled";
-            const canEdit = ((globalUser.username === t.PIC || globalUser.role === "Admin") && !t.Is_Overdue);
+            const canEdit = ((globalUser.username === t.PIC || globalUser.role === "Admin") && (!t.Is_Overdue || globalUser.role === "Admin"));
             const clickAction = canEdit ? `onclick="editTask('${escapeHtml(t.ID_Task)}')"` : ``;
             const editIcon = canEdit ? `<span class="edit-icon">✏️</span>` : ``;
             html += `<tr class="${rClass}"><td class="desc-text" ${clickAction}>${escapeHtml(t.Deskripsi)} ${t.Is_Overdue ? `<span class="overdue-badge">OVERDUE</span>` : ``} ${editIcon}</td><td>${formatDeadlineRead(t.Tipe, t.Deadline, t.Is_Overdue)}</td><td>${escapeHtml(t.Nama_PIC || t.PIC)}</td><td class="td-center"><input type="checkbox" onchange="updateStatus(this,'${escapeHtml(t.ID_Task)}')" ${isSelesai} ${canCheck}></td></tr>`;
