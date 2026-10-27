@@ -177,6 +177,14 @@ function setupTemplate() {
     }
   });
   shUsers.getRange(2, 5, 1000, 1).setNumberFormat("@");
+  // PERBAIKAN PASCA-TEST_CHECKLIST (temuan 1): sel kontak admin di Settings
+  // juga berformat teks, agar nomor 08... tidak dipaksa numerik.
+  if (shSet && shSet.getLastRow() > 1) {
+    const setRows = shSet.getDataRange().getValues();
+    for (let i = 1; i < setRows.length; i++) {
+      if (setRows[i][0] === "No_WA_Admin") shSet.getRange(i + 1, 2).setNumberFormat("@");
+    }
+  }
   SpreadsheetApp.flush();
 }
 
@@ -225,7 +233,7 @@ function getUserByUsername_(ss, username) {
   const data = sh.getDataRange().getValues();
   for (let i = 1; i < data.length; i++) {
     if (String(data[i][0]).trim() === String(username).trim()) {
-      return { username: data[i][0], role: data[i][2], nama: data[i][3], wa: data[i][4], email: data[i][5] };
+      return { username: data[i][0], role: data[i][2], nama: data[i][3], wa: normalizeWa_(data[i][4]), email: data[i][5] };
     }
   }
   return null;
@@ -281,6 +289,26 @@ function validateUserPayload_(user, isEdit) {
   // Nomor WA disimpan sebagai string agar nol depan (08...) tidak hilang.
   if (user.wa && !/^\d{8,15}$/.test(String(user.wa).trim())) return "Nomor WA harus angka 8 sampai 15 digit.";
   return null;
+}
+
+// PERBAIKAN PASCA-TEST_CHECKLIST 27 Okt 2026 (temuan 1: WA 08 kehilangan nol
+// depan). Format "@" di setupTemplate saja TIDAK cukup: sel yang ditulis lewat
+// setValues/appendRow pada Sheet yang berformat General tetap dipaksa jadi
+// numerik oleh Sheets, sehingga "0812..." tersimpan sebagai 812... dan tidak
+// bisa dipulihkan dari nilai itu. Karena itu setiap penulisan WA WAJIB
+// memformat sel ke "@" dulu, lalu menulis ulang nilai string-nya. Baris yang
+// SUDAH terlanjur terpotong sebelum perbaikan ini tidak bisa dipulihkan
+// otomatis — admin harus mengisi ulang nomor WA user tersebut.
+// normalizeWa_ hanya menormalisasi representasi, bukan menebak nol yang hilang.
+function normalizeWa_(v) {
+  if (v === null || v === undefined) return "";
+  return String(v).trim();
+}
+
+function writeWaCell_(sh, row, col, wa) {
+  const cell = sh.getRange(row, col);
+  cell.setNumberFormat("@");
+  cell.setValue(normalizeWa_(wa));
 }
 
 function getRekapKey_(idTask, ymd) {
@@ -660,7 +688,7 @@ function prosesAPI(payload) {
       for (let i = 1; i < usersRaw.length; i++) {
         userNamesMap[usersRaw[i][0]] = usersRaw[i][3];
         if (isAdminGD) {
-          allUsers.push({ username: usersRaw[i][0], role: usersRaw[i][2], nama: usersRaw[i][3], wa: usersRaw[i][4], email: usersRaw[i][5] });
+          allUsers.push({ username: usersRaw[i][0], role: usersRaw[i][2], nama: usersRaw[i][3], wa: normalizeWa_(usersRaw[i][4]), email: usersRaw[i][5] });
           if (usersRaw[i][2] === "PIC") pics.push({ username: usersRaw[i][0], nama: usersRaw[i][3] });
         } else if (String(usersRaw[i][0]) === sessionUser.username) {
           allUsers.push({ username: usersRaw[i][0], role: usersRaw[i][2], nama: usersRaw[i][3] });
@@ -799,8 +827,17 @@ function prosesAPI(payload) {
             const rowIsOverdue = kategori[k] === "Overdue" || String(data[i][0] || "").indexOf("OVD-") === 0 || !!data[i][8];
             if (rowIsOverdue && currentUser.role !== "Admin") return { status: "error", message: "Tugas overdue hanya dapat diedit oleh Admin." };
             if (!rowIsOverdue && !canAccessTask_(currentUser, data[i][4])) return { status: "error", message: "Anda tidak berwenang mengedit tugas ini." };
-            const deadline = payload.Tipe === "Harian" ? "-" : payload.Deadline;
+            let deadline = payload.Tipe === "Harian" ? "-" : payload.Deadline;
             if (rowIsOverdue) {
+              // PERBAIKAN PASCA-TEST_CHECKLIST (temuan 3): baris Overdue menyimpan
+              // tanggal jatuh tempo ASLI di kolom Deadline (mis. tanggal saat
+              // tugas harian itu lewat tenggat). Tipe Harian di backend selalu
+              // dipaksa jadi "-", dan form edit overdue menyembunyikan input
+              // deadline, sehingga simpan tanpa ubah menimpa tanggal asli itu
+              // dengan "-" — kehilangan data diam-diam. Untuk baris overdue,
+              // "-" / kosong TIDAK PERNAH boleh menimpa deadline yang ada:
+              // pertahankan nilai lama.
+              if (!deadline || String(deadline).trim() === "-") deadline = String(data[i][3] || "");
               // Overdue tetap berada di sheet Overdue. Admin boleh mengubah uraian, tipe, deadline, PIC, mulai, dan progress.
               sh.getRange(i + 1, 2, 1, 4).setValues([[String(payload.Deskripsi).trim(), payload.Tipe, deadline, payload.PIC]]);
               sh.getRange(i + 1, 7, 1, 2).setValues([[payload.Tgl_Mulai || "", payload.Progress || ""]]);
@@ -843,7 +880,7 @@ function prosesAPI(payload) {
       for (let i = 1; i < data.length; i++) if (data[i][0] === payload.user.username) { isEdit = true; break; }
       const err = validateUserPayload_(payload.user, isEdit);
       if (err) return { status: "error", message: err };
-      const waStr = payload.user.wa ? String(payload.user.wa).trim() : "";
+      const waStr = normalizeWa_(payload.user.wa);
       let passHash = "";
       let passSalt = "";
       if (String(payload.user.password || "").trim()) {
@@ -856,11 +893,17 @@ function prosesAPI(payload) {
           // PATCH: password kosong saat edit = pertahankan hash & salt lama.
           if (!passHash) { passHash = String(data[i][6] || ""); passSalt = String(data[i][7] || ""); }
           if (!passHash) return { status: "error", message: "User lama belum punya password bersalt. Isi password baru untuk user ini." };
+          sh.getRange(i + 1, 5).setNumberFormat("@");
           sh.getRange(i + 1, 1, 1, 8).setValues([[payload.user.username, "", payload.user.role, payload.user.nama, waStr, payload.user.email, passHash, passSalt]]);
+          // Tegaskan lagi sebagai teks setelah tulis, agar Sheets tidak memaksa numerik.
+          writeWaCell_(sh, i + 1, 5, waStr);
           found = true; break;
         }
       }
-      if (!found) sh.appendRow([payload.user.username, "", payload.user.role, payload.user.nama, waStr, payload.user.email, passHash, passSalt]);
+      if (!found) {
+        sh.appendRow([payload.user.username, "", payload.user.role, payload.user.nama, waStr, payload.user.email, passHash, passSalt]);
+        writeWaCell_(sh, sh.getLastRow(), 5, waStr);
+      }
       SpreadsheetApp.flush();
       return { status: "success" };
     }
@@ -898,7 +941,10 @@ function prosesAPI(payload) {
       for (let i = 1; i < data.length; i++) {
         const key = data[i][0];
         if (ALLOWED_SETTINGS.includes(key) && payload.settings && payload.settings.hasOwnProperty(key)) {
-          sheet.getRange(i + 1, 2).setValue(payload.settings[key]);
+          // PERBAIKAN PASCA-TEST_CHECKLIST (temuan 1): kontak admin juga WA,
+          // jadi selnya wajib berformat teks "@" sebelum ditulis.
+          if (key === "No_WA_Admin") writeWaCell_(sheet, i + 1, 2, payload.settings[key]);
+          else sheet.getRange(i + 1, 2).setValue(payload.settings[key]);
         }
       }
       SpreadsheetApp.flush();
@@ -1016,7 +1062,14 @@ function prosesAPI(payload) {
 
     return { status: "error", message: "Aksi tidak dikenali server." };
   } catch (error) {
-    return { status: "error", message: error.toString() };
+    // PERBAIKAN PASCA-TEST_CHECKLIST (temuan 2, akar masalah): catch ini
+    // sebelumnya MEMBUANG error.code, sehingga SESSION_EXPIRED dari
+    // requireSession_ sampai ke frontend hanya sebagai error generik tanpa
+    // kode — frontend tidak bisa membedakannya dari error biasa dan hanya
+    // menampilkan toast, dashboard lama tetap terlihat. Pertahankan kodenya.
+    const body = { status: "error", message: error.toString() };
+    if (error && error.code) body.code = error.code;
+    return body;
   }
 }
 
@@ -1051,6 +1104,8 @@ function buatAdminPertamaDariProperties() {
   if (sh.getLastColumn() < 8 || sh.getRange(1, 8).getValue() !== "Password_Salt") sh.getRange(1, 8).setValue("Password_Salt");
   const salt = newSalt_();
   sh.appendRow([username, "", "Admin", nama, wa, email, hashPasswordWithSalt_(password, salt), salt]);
+  // PERBAIKAN PASCA-TEST_CHECKLIST (temuan 1): tegaskan WA admin pertama sebagai teks.
+  writeWaCell_(sh, sh.getLastRow(), 5, wa);
   SpreadsheetApp.flush();
   Logger.log("SIBACOT: admin pertama berhasil dibuat untuk username yang diset di properti. HAPUS kelima properti setup sekarang.");
 }
@@ -1168,7 +1223,7 @@ function prosesReminder() {
   const set = {};
   for (let i = 1; i < dataSettings.length; i++) set[dataSettings[i][0]] = dataSettings[i][1];
   const userMap = {};
-  for (let i = 1; i < dataUsers.length; i++) userMap[dataUsers[i][0]] = { nama: dataUsers[i][3], wa: dataUsers[i][4], email: dataUsers[i][5] };
+  for (let i = 1; i < dataUsers.length; i++) userMap[dataUsers[i][0]] = { nama: dataUsers[i][3], wa: normalizeWa_(dataUsers[i][4]), email: dataUsers[i][5] };
   const currentAppName = PropertiesService.getScriptProperties().getProperty("App_Name") || "SIBACOT";
   const currDay = parseInt(Utilities.formatDate(now, APP_TZ, "u")) % 7;
   const currDate = parseInt(Utilities.formatDate(now, APP_TZ, "d"));
@@ -1252,17 +1307,38 @@ function prosesReminder() {
 function kirimFonnte(noWA, pesan, token) {
   // PATCH: mengembalikan true/false dan mencatat kegagalan, bukan menelan error.
   // Token TIDAK PERNAH ditulis ke log.
+  // PERBAIKAN PASCA-TEST_CHECKLIST (temuan 4): Fonnte membalas HTTP 200
+  // dengan body JSON {"status": false, "reason": "token invalid"} untuk token
+  // tidak valid (didokumentasikan di docs Fonnte: token salah -> status false).
+  // Versi lama hanya mengecek kode HTTP, sehingga gagal kirim itu dilaporkan
+  // sukses dan prosesReminder() menandai dedupe terkirim. Sekarang body JSON
+  // di-parse: bila field "status" ada dan bernilai false (boolean, string
+  // "false", atau 0), kirim dianggap GAGAL. Bila body tidak ter-parse atau
+  // tidak punya field status, perilaku lama dipertahankan (2xx = sukses),
+  // agar bentuk sukses lain dari gateway (mis. berisi id/process) tidak
+  // tiba-tiba dianggap gagal. Hanya reason/detail yang dicatat ke log,
+  // BUKAN seluruh body dan BUKAN token.
   try {
     const resp = UrlFetchApp.fetch("https://api.fonnte.com/send", {
       method: "post",
       headers: { Authorization: token },
-      payload: { target: noWA, message: pesan },
+      payload: { target: String(noWA), message: pesan },
       muteHttpExceptions: true
     });
     const code = resp.getResponseCode();
     if (code < 200 || code >= 300) {
       Logger.log("SIBACOT: kirim WA gagal, HTTP " + code + " (isi respons tidak dicatat).");
       return false;
+    }
+    let parsed = null;
+    try { parsed = JSON.parse(resp.getContentText()); } catch (e) { parsed = null; }
+    if (parsed && typeof parsed === "object" && "status" in parsed) {
+      const st = parsed.status;
+      if (st === false || st === "false" || st === 0 || st === "0") {
+        const reason = parsed.reason || parsed.detail || "";
+        Logger.log("SIBACOT: kirim WA gagal menurut body gateway (status=false)" + (reason ? ": " + String(reason) : "") + ".");
+        return false;
+      }
     }
     return true;
   } catch (e) {
