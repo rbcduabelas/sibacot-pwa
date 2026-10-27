@@ -191,6 +191,72 @@ bisa memanggil backend).
   diganti/diarsipkan saat patch ini resmi dipakai, agar tidak ada dua "prosedur"
   yang bertentangan.
 
+## Perbaikan pasca-TEST_CHECKLIST 27 Okt 2026
+
+Dilakukan hanya di salinan patch lokal ini, setelah TEST_CHECKLIST di artefak
+uji (24/24 kasus backend lulus, tidak ada kasus keamanan gagal). Keempat temuan
+di bawah ini **bukan** keamanan, tetapi pemilik meminta semuanya diperbaiki dulu
+sebelum rilis. Perbaikan ini baru terverifikasi lokal — uji ulang live di
+artefak uji masih diperlukan sebelum push/merge/deploy (lihat bagian akhir).
+
+1. **WA 08 kehilangan nol depan — akar masalah: format sel, bukan hanya tipe
+   input.** Input frontend memang sudah `type="tel"`, dan `setupTemplate()`
+   memang sudah memformat kolom WA Users ke "@", tetapi penulisan lewat
+   `setValues`/`appendRow` pada sel berformat General tetap dipaksa Sheets
+   menjadi numerik. Perbaikannya: helper baru `normalizeWa_()` +
+   `writeWaCell_()` di `gas/Code.gs` — setiap penulisan WA (saveUser saat edit
+   maupun buat baru, saveSettings untuk kontak admin, admin pertama lewat
+   editor, dan format di `setupTemplate()`) kini memformat sel ke "@" dulu
+   lalu menulis ulang nilai string-nya; frontend (`submitUser`,
+   `saveSettings`) juga mengirim WA selalu sebagai string yang di-trim.
+   `getData`, `getUserByUsername_`, dan `prosesReminder` menormalisasi WA ke
+   string saat dibaca. Catatan jujur: baris yang **sudah** terlanjur terpotong
+   sebelum perbaikan ini tidak bisa dipulihkan otomatis dari nilai yang
+   tersisa — admin harus mengisi ulang nomor WA user yang terdampak.
+2. **Sesi kedaluwarsa di UI tidak kembali ke login — akar masalah: kode error
+   terbuang di backend.** `requireSession_()` memang melempar
+   `SESSION_EXPIRED`, tetapi `catch` di akhir `prosesAPI()` mengembalikan
+   error generik tanpa `code`, sehingga frontend tidak bisa membedakannya
+   dari error biasa dan hanya menampilkan toast. Perbaikannya dua lapis:
+   `catch` prosesAPI kini mempertahankan `error.code` bila ada (sama seperti
+   `catch` di `doPost`), dan `callAPI()` di frontend kini juga mengenali
+   pesan "sesi tidak valid atau kedaluwarsa" sebagai cadangan — dalam kedua
+   kasus, cache tugas/user/libur dibersihkan, timer auto-logout dihentikan,
+   dan UI dipaksa ke layar login (bukan hanya toast di atas dashboard lama).
+3. **Simpan tugas harian overdue tanpa ubah menghapus Deadline jadi "-" —
+   akar masalah di backend, bukan hanya di form.** Form edit overdue memang
+   menyembunyikan input deadline, tetapi penyebab hilangnya tanggal adalah
+   `editTask`: tipe Harian selalu dipaksa jadi "-" saat menulis, padahal
+   kolom Deadline baris Overdue menyimpan tanggal jatuh tempo asli.
+   Perbaikannya dua lapis: di `editTask`, untuk baris overdue, nilai "-"
+   atau kosong **tidak pernah** menimpa deadline yang ada — nilai lama
+   dipertahankan; di frontend, `submitTask()` untuk tugas overdue yang
+   deadline-nya "-" / kosong mengirim deadline asli dari data yang sedang
+   diedit. Untuk tugas Harian yang **bukan** overdue, "-" tetap perilaku
+   yang benar (tugas harian memang tidak punya tanggal deadline).
+4. **Gagal kirim WA tidak terdeteksi — akar masalah: hanya kode HTTP yang
+   dicek.** Fonnte membalas HTTP 200 dengan body JSON `{"status": false,
+   "reason": "token invalid"}` untuk token tidak valid (sesuai dokumentasi
+   Fonnte: token salah -> status false), tetapi `kirimFonnte()` lama hanya
+   mengecek kode HTTP 2xx sehingga melaporkan sukses dan `prosesReminder()`
+   menandai dedupe terkirim. Perbaikannya: `kirimFonnte()` kini mem-parse
+   body JSON dan menganggap gagal bila field `status` ada dan bernilai
+   false (boolean, string "false", atau 0); hanya `reason`/`detail` yang
+   dicatat ke log, bukan seluruh body dan bukan token. Bila body tidak
+   ter-parse atau tidak punya field `status`, perilaku lama dipertahankan
+   (2xx = sukses) agar bentuk sukses lain gateway tidak tiba-tiba dianggap
+   gagal. Karena `prosesReminder()` dan `testNotif` sudah memakai nilai
+   balik `kirimFonnte()`, gagal kirim kini tidak lagi menandai dedupe
+   terkirim dan akan dicoba lagi pada run berikutnya di jam yang sama.
+   Catatan terpisah: gateway yang membalas 2xx/status true untuk nomor
+   yang tidak ada adalah perilaku gateway, bukan sesuatu yang bisa
+   diperbaiki dari patch ini — kasus itu tetap dilaporkan sukses oleh
+   gateway tanpa pengiriman nyata.
+
+File yang berubah pada putaran perbaikan ini: `gas/Code.gs`,
+`docs/index.html`, dan dokumen ini (`PATCH_NOTES.md`). `docs/config.js`,
+`docs/manifest.webmanifest`, dan `docs/sw.js` tidak diubah pada putaran ini.
+
 ## Verifikasi yang sudah dilakukan di patch ini (lokal, tanpa data live)
 
 - `diff` folder asli vs hasil patch: hanya 5 file yang berubah —
