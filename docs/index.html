@@ -987,9 +987,24 @@
         const timeoutId = setTimeout(() => { showToast("Koneksi Server Timeout. Pastikan Otorisasi di Apps Script disetujui."); reject(new Error("Timeout")); }, 30000);
         const handleResult = (res) => {
           clearTimeout(timeoutId);
-          if (res && res.code === "SESSION_EXPIRED") {
+          // PERBAIKAN PASCA-TEST_CHECKLIST (temuan 2): backend lama membuang
+          // kode SESSION_EXPIRED di catch prosesAPI, sehingga respons sampai
+          // hanya sebagai error generik. Backend kini mempertahankan kode,
+          // tapi frontend juga mengenali pesan kedaluwarsanya sebagai
+          // cadangan, agar jalur ini tidak bergantung pada satu field saja.
+          // Dalam kedua kasus, cache tampilan dibersihkan dulu dan UI
+          // dipaksa ke layar login — bukan hanya toast di atas dashboard lama.
+          const isSessionExpired = res && (res.code === "SESSION_EXPIRED" ||
+            (res.status === "error" && /sesi tidak valid atau kedaluwarsa/i.test(String(res.message || ""))));
+          if (isSessionExpired) {
             showToast("Sesi Anda kedaluwarsa. Silakan login ulang.");
             clearSessionOnly();
+            globalTasks = [];
+            globalUsers = [];
+            globalHolidays = [];
+            try { stopAutoLogout(); } catch (e) {}
+            try { document.getElementById("appSection").style.display = "none"; } catch (e) {}
+            try { document.getElementById("loginSection").style.display = "flex"; } catch (e) {}
             checkSession();
             resolve(res);
             return;
@@ -1551,12 +1566,20 @@
       const btn = document.getElementById('saveBtn');
       btn.innerText = "Memproses...";
       btn.disabled = true;
+      // PERBAIKAN PASCA-TEST_CHECKLIST (temuan 3): untuk tugas overdue, form
+      // menyembunyikan input deadline (tipe Harian -> hidden "-"), sehingga
+      // simpan tanpa ubah mengirim "-" dan menimpa tanggal asli. Kirim
+      // deadline asli dari data yang sedang diedit bila nilainya "-" / kosong.
+      // Backend juga menjaga hal yang sama sebagai pertahanan kedua.
+      let deadlineVal = document.getElementById('inDeadline').value;
+      const editingTask = idTask ? globalTasks.find(x => x.ID_Task === idTask) : null;
+      if (editingTask && editingTask.Is_Overdue && (!deadlineVal || deadlineVal === "-")) deadlineVal = editingTask.Deadline;
       const res = await callAPI({
         action: idTask !== "" ? "editTask" : "addTask",
         ID_Task: idTask,
         Deskripsi: document.getElementById('inDeskripsi').value,
         Tipe: document.getElementById('inTipe').value,
-        Deadline: document.getElementById('inDeadline').value,
+        Deadline: deadlineVal,
         PIC: globalUser.role === 'Admin' ? document.getElementById('inPIC').value : globalUser.username,
         Tgl_Mulai: document.getElementById('inTglMulai').value,
         Progress: document.getElementById('inProgress').value
@@ -1608,7 +1631,10 @@
         password: document.getElementById('inUPass').value,
         role: document.getElementById('inURole').value,
         nama: document.getElementById('inUFullName').value,
-        wa: document.getElementById('inUWA').value,
+        // PERBAIKAN PASCA-TEST_CHECKLIST (temuan 1): kirim WA selalu sebagai
+        // string yang sudah di-trim, jangan pernah sebagai angka, agar "08..."
+        // tidak kehilangan nol depan sebelum sampai ke backend.
+        wa: String(document.getElementById('inUWA').value || "").trim(),
         email: document.getElementById('inUEmail').value
       };
       await callAPI({ action: "saveUser", user: usr });
@@ -1651,7 +1677,9 @@
       await callAPI({ action: "saveSettings", settings: {
         // PATCH: Token_Fonnte sengaja TIDAK dikirim. Backend juga mengabaikannya
         // bila ada. Rotasi token dilakukan pemilik langsung di Sheet.
-        No_WA_Admin: document.getElementById("setAdminWA").value,
+        // PERBAIKAN PASCA-TEST_CHECKLIST (temuan 1): sama seperti WA user,
+        // kontak admin dikirim sebagai string agar nol depan utuh.
+        No_WA_Admin: String(document.getElementById("setAdminWA").value || "").trim(),
         Gunakan_WA: document.getElementById("setGunakanWA").value,
         Gunakan_Email: document.getElementById("setGunakanEmail").value,
         Jam_Notif_Harian: document.getElementById("setJamHarian").value,
