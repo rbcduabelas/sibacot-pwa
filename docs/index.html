@@ -2,7 +2,7 @@
 <html lang="id">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Aplikasi Tugas</title>
   <meta name="theme-color" content="#011F7B">
   <meta name="mobile-web-app-capable" content="yes">
@@ -267,6 +267,7 @@
     }
 
     #installAppBtn { display:none; background:var(--corp-gold); color:var(--corp-blue); padding:6px 10px; border-radius:18px; font-size:11px; text-transform:none; letter-spacing:0; white-space:nowrap; }
+    #logoutBtn { background:transparent; color:#fff; border:1px solid rgba(255,255,255,0.6); padding:6px 10px; border-radius:18px; font-size:11px; text-transform:none; letter-spacing:0; white-space:nowrap; }
 
     @media(max-width: 520px) {
       .ent-header { padding: 8px 12px; gap: 8px; }
@@ -500,7 +501,7 @@
   <div id="inactivityBar">⏱️ Sesi akan berakhir dalam <span id="countdownText">60</span> detik karena tidak ada aktivitas.</div>
 
   <div id="notifBanner">
-    <span>🔔 Aktifkan notifikasi browser untuk mendapat pengingat tugas secara real-time</span>
+    <span>🔔 Pengingat tugas tampil sebagai badge di dalam aplikasi dan diperbarui saat aplikasi dibuka — bukan notifikasi push real-time. Aktifkan izin browser bila Anda ingin badge diperbarui berkala saat aplikasi terbuka.</span>
     <button onclick="mintaIzinNotifikasi()">Aktifkan</button>
     <button class="notif-dismiss" onclick="tutupNotifBanner()" title="Tutup">✕</button>
   </div>
@@ -561,6 +562,7 @@
       <div class="header-right">
         <button id="installAppBtn" type="button" onclick="installPWA()">Install</button>
         <button id="notifBadgeBtn" onclick="toggleNotifPanel()" title="Pengingat Tugas">🔔<span id="notifBadgeCount">0</span></button>
+        <button id="logoutBtn" type="button" onclick="doLogout()" title="Keluar dari aplikasi">Keluar</button>
         <img id="headerAppLogo" onclick="handleLogoTap()" src="https://upload.wikimedia.org/wikipedia/commons/a/a2/Logo_of_Bank_Mandiri.svg" alt="Logo" title="Ketuk 2x untuk logout" onerror="this.src='https://upload.wikimedia.org/wikipedia/commons/a/a2/Logo_of_Bank_Mandiri.svg'">
       </div>
     </header>
@@ -686,8 +688,8 @@
         <div class="card">
           <h3 class="card-title">Sistem & Notifikasi</h3>
           <form id="formSettings" onsubmit="saveSettings(event)">
-            <div class="input-group"><label>API Token Fonnte</label><input type="text" id="setToken"></div>
-            <div class="input-group"><label>Kontak Admin (WA)</label><input type="number" id="setAdminWA"></div>
+            <div class="input-group"><label>Token Gateway WA (tidak pernah ditampilkan kembali)</label><input type="text" id="setToken" placeholder="Dikosongkan = token yang tersimpan tidak berubah. Rotasi token dilakukan langsung di Sheet — lihat ROTASI_LIVE.md."></div>
+            <div class="input-group"><label>Kontak Admin (WA)</label><input type="tel" id="setAdminWA" inputmode="tel" pattern="[0-9]{8,15}" placeholder="08..."></div>
             <div class="form-row">
               <div class="input-group"><label>Notif WA?</label><select id="setGunakanWA"><option>Ya</option><option>Tidak</option></select></div>
               <div class="input-group"><label>Notif Email?</label><select id="setGunakanEmail"><option>Ya</option><option>Tidak</option></select></div>
@@ -747,11 +749,11 @@
       <h2 id="userModalTitle" style="margin-top:0; color:var(--corp-blue);">Formulir User</h2>
       <form id="userForm" onsubmit="event.preventDefault(); submitUser();">
         <div class="input-group"><label>ID Login</label><input type="text" id="inUName" required></div>
-        <div class="input-group"><label>Kata Sandi</label><input type="text" id="inUPass" required></div>
+        <div class="input-group"><label>Kata Sandi</label><input type="password" id="inUPass" placeholder="Kosongkan saat edit jika tidak mengubah password"></div>
         <div class="input-group"><label>Nama Lengkap</label><input type="text" id="inUFullName" required></div>
         <div class="form-row">
           <div class="input-group"><label>Role</label><select id="inURole"><option>PIC</option><option>Admin</option></select></div>
-          <div class="input-group"><label>No WA</label><input type="number" id="inUWA" required></div>
+          <div class="input-group"><label>No WA</label><input type="tel" id="inUWA" inputmode="tel" pattern="[0-9]{8,15}" placeholder="08..." required></div>
         </div>
         <div class="input-group"><label>Email</label><input type="email" id="inUEmail"></div>
         <div class="form-actions">
@@ -765,9 +767,14 @@
   <script src="config.js"></script>
   <script>
     // HOTFIX 2026-07-02 ADMIN EDIT OVERDUE
+    // PATCH KEAMANAN: kunci penyimpanan lama diganti (semua user wajib login ulang
+    // pada rilis ini — disengaja, karena sesi lama tidak memakai token server).
+    // Token sesi disimpan terpisah dan SELALU dikirim ke backend; username/peran
+    // tidak pernah dipercaya dari localStorage untuk otorisasi.
     let globalTasks = [];
     let globalUsers = [];
     let globalUser = null;
+    let globalSessionToken = null;
     let globalHolidays = [];
     let curMonth = new Date().getMonth();
     let curYear = new Date().getFullYear();
@@ -891,9 +898,13 @@
             else return;
           } else return;
         } else if (t.Tipe === "Bulanan") {
+          // PATCH: "besok" dihitung dari tanggal kalender besok, bukan currDate+1,
+          // agar benar di batas bulan (mis. 31 Jan -> deadline tgl 1).
           const td2 = parseInt(t.Deadline);
+          const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1);
+          const tomorrowDate = tomorrow.getDate();
           if (td2 === currDate) { label = "Deadline tgl " + t.Deadline + " — HARI INI ⚠️"; cls = "deadline-today"; icon = "⚠️"; }
-          else if (td2 === currDate + 1) { label = "Deadline besok, tgl " + t.Deadline; cls = "upcoming"; icon = "📆"; }
+          else if (td2 === tomorrowDate) { label = "Deadline besok, tgl " + t.Deadline; cls = "upcoming"; icon = "📆"; }
           else return;
         } else if (t.Tipe === "Tambahan") {
           if (!t.Deadline || t.Deadline === "-") return;
@@ -930,7 +941,7 @@
       if (!cekDukunganNotifikasi()) { showToast("Browser Anda tidak mendukung notifikasi."); tutupNotifBanner(); return; }
       Notification.requestPermission().then(permission => {
         tutupNotifBanner();
-        if (permission === 'granted') { showToast("Notifikasi berhasil diaktifkan! ✅"); mulaiCekNotifTugas(); }
+        if (permission === 'granted') { showToast("Izin diaktifkan. Pengingat tetap berupa badge di dalam aplikasi, diperbarui saat aplikasi dibuka."); mulaiCekNotifTugas(); }
         else showToast("Izin notifikasi ditolak.");
       });
     }
@@ -965,29 +976,56 @@
 
     function callAPI(payload) {
       return new Promise((resolve, reject) => {
-        if (globalUser) { payload.sessionUsername = globalUser.username; if (!payload.username) payload.username = globalUser.username; }
-        else { payload.username = payload.username || "guest"; }
+        // PATCH: otorisasi memakai token sesi server. Jangan kirim sessionUsername
+        // dari client — backend menurunkannya dari token.
+        if (payload.action !== "login") {
+          if (globalSessionToken) payload.sessionToken = globalSessionToken;
+          // Jangan set payload.username dari localStorage untuk aksi non-login,
+          // kecuali pemanggil sudah mengisinya secara eksplisit (mis. target
+          // deleteUser). Backend mengabaikan username client untuk otorisasi.
+        }
         const timeoutId = setTimeout(() => { showToast("Koneksi Server Timeout. Pastikan Otorisasi di Apps Script disetujui."); reject(new Error("Timeout")); }, 30000);
+        const handleResult = (res) => {
+          clearTimeout(timeoutId);
+          if (res && res.code === "SESSION_EXPIRED") {
+            showToast("Sesi Anda kedaluwarsa. Silakan login ulang.");
+            clearSessionOnly();
+            checkSession();
+            resolve(res);
+            return;
+          }
+          if (res && res.status === "error") showToast(res.message || "Terjadi kesalahan.");
+          resolve(res);
+        };
         if (typeof google !== 'undefined' && google.script && google.script.run) {
           google.script.run
-            .withSuccessHandler((res) => { clearTimeout(timeoutId); if (res && res.status === "error") showToast(res.message || "Terjadi kesalahan."); resolve(res); })
+            .withSuccessHandler(handleResult)
             .withFailureHandler(error => { clearTimeout(timeoutId); showToast("Server Gagal: " + error.message); reject(error); })
             .prosesAPI(payload);
           return;
         }
         const apiUrl = (window.SIBACOT_CONFIG && window.SIBACOT_CONFIG.API_URL) || "";
-        if (!apiUrl || apiUrl.includes("PASTE_URL_WEB_APP_GAS_DI_SINI")) { clearTimeout(timeoutId); showToast("API GAS belum diatur. Isi URL Web App di config.js."); reject(new Error("API_URL kosong")); return; }
+        if (!apiUrl || apiUrl.includes("ISI_URL_WEB_APP_BARU_SETELAH_REDEPLOY")) { clearTimeout(timeoutId); showToast("API GAS belum diatur. Isi URL Web App baru di config.js setelah redeploy."); reject(new Error("API_URL kosong")); return; }
         fetch(apiUrl, { method:"POST", redirect:"follow", headers:{"Content-Type":"text/plain;charset=utf-8"}, body:JSON.stringify(payload) })
           .then(r => r.text())
-          .then(txt => { clearTimeout(timeoutId); let res = JSON.parse(txt); if (res && res.status === "error") showToast(res.message || "Terjadi kesalahan."); resolve(res); })
+          .then(txt => { let res = JSON.parse(txt); handleResult(res); })
           .catch(error => { clearTimeout(timeoutId); showToast("API GitHub/GAS gagal: " + error.message); reject(error); });
       });
+    }
+
+    function clearSessionOnly() {
+      globalUser = null;
+      globalSessionToken = null;
+      try { localStorage.removeItem("sibacot_user"); } catch (e) {}
+      try { localStorage.removeItem("sibacot_session_token"); } catch (e) {}
     }
 
     document.addEventListener("DOMContentLoaded", checkSession);
 
     function checkSession() {
-      try { globalUser = JSON.parse(localStorage.getItem("koseklis_user")); } catch (e) { globalUser = null; }
+      try { globalUser = JSON.parse(localStorage.getItem("sibacot_user")); } catch (e) { globalUser = null; }
+      try { globalSessionToken = localStorage.getItem("sibacot_session_token") || null; } catch (e) { globalSessionToken = null; }
+      if (globalUser && !globalSessionToken) { globalUser = null; } // tanpa token server, sesi lokal tidak berlaku
       if (globalUser) {
         document.getElementById("loginSection").style.display = "none";
         document.getElementById("appSection").style.display = "block";
@@ -1033,8 +1071,10 @@
     }
 
     async function loadSettingsOnlyForLogin() {
+      // PATCH: layar login TIDAK LAGI memanggil getData sebagai "guest".
+      // Hanya identitas publik (nama/deskripsi/logo) yang boleh diambil tanpa sesi.
       try {
-        const data = await callAPI({ action: "getData", role: "PIC", username: "guest" });
+        const data = await callAPI({ action: "getPublicIdentity" });
         if (data && data.settings) applyIdentity(data.settings);
       } catch (err) {}
     }
@@ -1051,10 +1091,12 @@
       btn.disabled = true;
       try {
         const data = await callAPI({ action: "login", username: uInput, password: pInput });
-        if (data.status === "success") {
-          localStorage.setItem("koseklis_user", JSON.stringify({ username: data.username, nama: data.nama, role: data.role }));
+        if (data.status === "success" && data.sessionToken) {
+          localStorage.setItem("sibacot_user", JSON.stringify({ username: data.username, nama: data.nama, role: data.role }));
+          localStorage.setItem("sibacot_session_token", data.sessionToken);
+          globalSessionToken = data.sessionToken;
           checkSession();
-        } else showToast(data.message);
+        } else showToast(data.message || "Login gagal.");
       } catch (err) {}
       btn.disabled = false;
     }
@@ -1062,9 +1104,11 @@
     function doLogout() {
       stopAutoLogout();
       globalUser = null;
+      globalSessionToken = null;
       notifTaskSudahDikirim.clear();
       if (notifCheckInterval) { clearInterval(notifCheckInterval); notifCheckInterval = null; }
-      localStorage.removeItem("koseklis_user");
+      localStorage.removeItem("sibacot_user");
+      localStorage.removeItem("sibacot_session_token");
       document.getElementById("inUser").value = "";
       document.getElementById("inPass").value = "";
       document.getElementById('notifPanel').style.display = 'none';
@@ -1099,7 +1143,7 @@
 
     async function loadData() {
       try {
-        const data = await callAPI({ action: "getData", role: globalUser.role, username: globalUser.username });
+        const data = await callAPI({ action: "getData" });
         if (data.status === "success") {
           globalTasks = data.tasks || [];
           globalUsers = data.allUsers || [];
@@ -1428,7 +1472,9 @@
 
     function fillSettings(s) {
       if (!s) return;
-      document.getElementById("setToken").value = s.Token_Fonnte || "";
+      // PATCH: token gateway TIDAK PERNAH dikembalikan server, jadi field ini
+      // selalu kosong. Mengosongkannya saat simpan TIDAK mengubah token lama.
+      document.getElementById("setToken").value = "";
       document.getElementById("setAdminWA").value = s.No_WA_Admin || "";
       document.getElementById("setGunakanWA").value = s.Gunakan_WA || "Ya";
       document.getElementById("setGunakanEmail").value = s.Gunakan_Email || "Tidak";
@@ -1579,7 +1625,7 @@
       document.getElementById('inUName').value = u.username;
       document.getElementById('inUName').readOnly = true;
       document.getElementById('inUPass').value = '';
-      document.getElementById('inUPass').placeholder = 'Isi password baru';
+      document.getElementById('inUPass').placeholder = 'Kosongkan jika tidak mengubah password';
       document.getElementById('inUFullName').value = u.nama;
       document.getElementById('inURole').value = u.role;
       document.getElementById('inUWA').value = u.wa;
@@ -1603,7 +1649,8 @@
       btn.innerText = "Menerapkan...";
       btn.disabled = true;
       await callAPI({ action: "saveSettings", settings: {
-        Token_Fonnte: document.getElementById("setToken").value,
+        // PATCH: Token_Fonnte sengaja TIDAK dikirim. Backend juga mengabaikannya
+        // bila ada. Rotasi token dilakukan pemilik langsung di Sheet.
         No_WA_Admin: document.getElementById("setAdminWA").value,
         Gunakan_WA: document.getElementById("setGunakanWA").value,
         Gunakan_Email: document.getElementById("setGunakanEmail").value,
