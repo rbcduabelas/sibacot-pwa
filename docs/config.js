@@ -1,4 +1,13 @@
-// Isi dengan URL Web App Google Apps Script hasil Deploy > Web app.
+// SIBACOT — konfigurasi frontend.
+// ISI URL WEB APP BARU SETELAH REDEPLOY (lihat ROTASI_LIVE.md, langkah 1).
+//
+// PENTING — JANGAN SALAH PAHAM:
+// URL ini memang terlihat oleh siapa pun yang membuka kode frontend publik,
+// dan itu BUKAN masalah yang harus "disembunyikan". Frontend publik tetap
+// butuh alamat backend untuk memanggilnya. Keamanan SIBACOT sekarang datang
+// dari TOKEN SESI yang diterbitkan server saat login dan wajib dibawa di
+// setiap aksi — bukan dari kerahasiaan URL ini. Tanpa token valid, backend
+// menolak semua aksi (kecuali login dan identitas publik).
 window.SIBACOT_CONFIG = {
-  API_URL: "https://script.google.com/macros/s/AKfycbxIVVpCc2_4Ot1drQfHJMv1H3he1DwSKXE5zxAxic0FPInNSy1V6uv9O6MZQK9qFcyx/exec"
+  API_URL: "ISI_URL_WEB_APP_BARU_SETELAH_REDEPLOY"
 };
