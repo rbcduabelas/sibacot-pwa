@@ -197,6 +197,10 @@
       margin-top: 10px;
     }
 
+    /* PASSKEY v1 (TEST ONLY): tombol sidik jari di layar login. */
+    .btn-passkey { width: 100%; padding: 14px; background: #fff; color: var(--corp-blue); border: 2px solid var(--corp-gold); border-radius: 8px; font-size: 15px; font-weight: 800; cursor: pointer; margin-top: 4px; }
+    .btn-passkey:disabled { opacity: 0.6; cursor: not-allowed; }
+
     .btn-primary { background: var(--corp-blue); color: var(--surface); }
     .btn-primary:hover { background: var(--corp-blue-light); }
     .btn-accent { background: var(--corp-gold); color: var(--corp-blue); }
@@ -551,6 +555,10 @@
             </div>
           </div>
           <button type="button" id="btnLogin" class="btn-login-custom" onclick="doLogin()">LOGIN</button>
+          <!-- PASSKEY v1 (TEST ONLY): login sidik jari, tanpa password. -->
+          <div style="text-align:center; color:#888; font-size:12px; margin:14px 0 8px;">— atau —</div>
+          <button type="button" id="btnPasskeyLogin" class="btn-passkey" onclick="loginWithPasskey()">👆 Masuk dengan sidik jari</button>
+          <div id="passkeyLoginNote" style="font-size:11px; color:#888; margin-top:8px; text-align:center;"></div>
         </div>
       </div>
     </div>
@@ -569,6 +577,14 @@
 
     <main class="container">
       <div class="welcome-bar"><span id="welcomeMsg"></span></div>
+      <!-- PASSKEY v1 (TEST ONLY): kartu pendaftaran sidik jari perangkat ini. -->
+      <div id="passkeyCard" class="card" style="display:none; margin-bottom:14px;">
+        <h3 class="card-title">🔐 Sidik Jari (Passkey) — Uji</h3>
+        <div style="font-size:13px; color:#444; margin-bottom:8px;">Login pertama tetap pakai password. Setelah itu, daftarkan perangkat ini agar login berikutnya bisa pakai sidik jari / face unlock — hanya di perangkat &amp; browser ini. Password tetap berfungsi sebagai cadangan.</div>
+        <div id="passkeyCount" style="font-size:12px; color:#666; margin-bottom:8px;">Memuat…</div>
+        <div id="passkeyList" style="font-size:13px; margin-bottom:8px;"></div>
+        <button type="button" class="btn-primary" id="btnRegisterPasskey" onclick="registerPasskey()">👆 Daftarkan sidik jari perangkat ini</button>
+      </div>
       <button class="fab-btn" id="fabAdd" onclick="openModal('taskModal')" style="display:none;">+</button>
 
       <div id="viewChecklist" style="display:block;">
@@ -815,6 +831,67 @@
       });
     }
 
+    // ==== 5HAL-TEST: tombol back HP (History API, konfirmasi buatan aplikasi) ====
+    // Latar: sebelumnya tidak ada penanganan back sama sekali, sehingga back
+    // HP keluar dari halaman / ke halaman sebelumnya tanpa konfirmasi.
+    // Pola ini meniru Kopikir, tapi di PWA: back menelusuri layar dalam
+    // aplikasi dulu; di layar utama tampil customConfirm "Yakin ingin
+    // keluar?" (BUKAN confirm() native — dialog native ditelan WebView
+    // tanpa WebChromeClient, sehingga confirm() selalu false).
+    // Cara kerja: setiap navigasi maju dalam aplikasi menambah satu entri
+    // history (sibacotPushNav). Saat back ditekan, popstate menavigasi
+    // SATU langkah ke belakang berdasarkan layar yang sedang tampil, lalu
+    // menambah entri lagi agar back berikutnya tetap dicegat. Di layar
+    // login, back TIDAK dicegat (biarkan browser keluar / ke halaman
+    // sebelumnya); catatan: karena ada satu entri seed saat load, back
+    // pertama di layar login hanya menghabiskan entri seed, back kedua
+    // yang benar-benar keluar — perilaku ini disengaja dan dicatat di
+    // checklist uji.
+    let sibacotBackBusy = false;
+    function sibacotPushNav() {
+      if (sibacotBackBusy) return;
+      try { history.pushState({ sibacot: 1 }, ""); } catch (e) {}
+    }
+    function sibacotCurrentView() {
+      const disp = (id) => { const el = document.getElementById(id); return el ? el.style.display : ""; };
+      if (disp("loginSection") === "flex") return "login";
+      if (disp("confirmModal") === "flex") return "confirm";
+      if (disp("taskModal") === "flex" || disp("userModal") === "flex") return "modal";
+      const adminSectionOpen = Array.from(document.querySelectorAll(".admin-section"))
+        .some((el) => el.style.display === "block");
+      if (adminSectionOpen) return "adminSection";
+      if (disp("viewAdminDasbor") === "block") return "adminDasbor";
+      return "checklist";
+    }
+    async function sibacotHandleBack() {
+      const view = sibacotCurrentView();
+      if (view === "login") return; // jangan dicegat di layar login
+      sibacotBackBusy = true;
+      try {
+        if (view === "confirm") {
+          // Batalkan konfirmasi yang sedang tampil (resolve promise = false).
+          const batal = document.getElementById("confirmBtnBatal");
+          if (batal) batal.click(); else document.getElementById("confirmModal").style.display = "none";
+        } else if (view === "modal") {
+          if (document.getElementById("taskModal").style.display === "flex") closeModal("taskModal");
+          if (document.getElementById("userModal").style.display === "flex") closeModal("userModal");
+        } else if (view === "adminSection") {
+          showAdminDasbor();
+        } else if (view === "adminDasbor") {
+          openAdminMenu("checklist");
+        } else { // checklist = layar utama dalam aplikasi
+          const ok = await customConfirm("Yakin ingin keluar?", "🚪");
+          if (ok) { doLogout(); return; } // ke layar login; jangan push lagi
+        }
+      } finally {
+        sibacotBackBusy = false;
+      }
+      sibacotPushNav(); // pulihkan titik cegat untuk back berikutnya
+    }
+    window.addEventListener("popstate", () => { sibacotHandleBack(); });
+    try { history.pushState({ sibacot: 1 }, ""); } catch (e) {}
+    // ==== AKHIR 5HAL-TEST back HP ====
+
     const TIMEOUT_MENIT = 3;
     const TIMEOUT_MS = TIMEOUT_MENIT * 60 * 1000;
     const WARNING_MS = (TIMEOUT_MENIT - 1) * 60 * 1000;
@@ -1058,6 +1135,8 @@
           document.querySelectorAll('.admin-section').forEach(el => el.style.display = 'none');
         }
         resetAutoLogout();
+        pkUpdatePasskeyUI();
+        pkRefreshPasskeyList();
         loadData().finally(() => { const lo = document.getElementById('loadingOverlay'); if (lo) lo.style.display = 'none'; });
         tampilkanBannerNotifJikaPerlu();
         const headerLogo = document.getElementById("headerAppLogo");
@@ -1070,6 +1149,7 @@
         document.getElementById("notifBadgeBtn").style.display = "none";
         stopAutoLogout();
         if (notifCheckInterval) { clearInterval(notifCheckInterval); notifCheckInterval = null; }
+        pkUpdatePasskeyUI();
         loadSettingsOnlyForLogin().finally(() => { const lo = document.getElementById('loadingOverlay'); if (lo) lo.style.display = 'none'; });
       }
     }
@@ -1098,6 +1178,14 @@
       if (e.key === "Enter" || e.keyCode === 13) { e.preventDefault(); doLogin(); }
     }
 
+    // Dipakai login password DAN login passkey: simpan sesi lalu masuk.
+    function pkApplyLoginSuccess(data) {
+      localStorage.setItem("sibacot_user", JSON.stringify({ username: data.username, nama: data.nama, role: data.role }));
+      localStorage.setItem("sibacot_session_token", data.sessionToken);
+      globalSessionToken = data.sessionToken;
+      checkSession();
+    }
+
     async function doLogin() {
       const uInput = document.getElementById("inUser").value.trim();
       const pInput = document.getElementById("inPass").value;
@@ -1106,14 +1194,131 @@
       btn.disabled = true;
       try {
         const data = await callAPI({ action: "login", username: uInput, password: pInput });
-        if (data.status === "success" && data.sessionToken) {
-          localStorage.setItem("sibacot_user", JSON.stringify({ username: data.username, nama: data.nama, role: data.role }));
-          localStorage.setItem("sibacot_session_token", data.sessionToken);
-          globalSessionToken = data.sessionToken;
-          checkSession();
-        } else showToast(data.message || "Login gagal.");
+        if (data.status === "success" && data.sessionToken) pkApplyLoginSuccess(data);
+        // 5HAL-TEST: toast error login HANYA dari callAPI (handleResult).
+        // Toast kedua di sini dulu membuat satu gagal login tampil 2x.
       } catch (err) {}
       btn.disabled = false;
+    }
+
+    // --- PASSKEY v1 (TEST ONLY) ---
+    // base64url <-> Uint8Array (WebAuthn memakai base64url tanpa padding).
+    function pkB64urlEncodeBuf(buf) {
+      const bytes = new Uint8Array(buf);
+      let bin = "";
+      bytes.forEach(b => { bin += String.fromCharCode(b); });
+      return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    }
+    function pkB64urlDecodeBuf(s) {
+      s = String(s || "").replace(/-/g, "+").replace(/_/g, "/");
+      while (s.length % 4) s += "=";
+      const bin = atob(s);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      return bytes;
+    }
+    function pkWebAuthnSupported() {
+      // WebAuthn butuh secure context (https / localhost). Di http biasa
+      // PublicKeyCredential tidak ada — tombol disembunyikan, bukan error.
+      return !!(window.PublicKeyCredential && window.isSecureContext);
+    }
+    function pkUpdatePasskeyUI() {
+      const supported = pkWebAuthnSupported();
+      const btn = document.getElementById("btnPasskeyLogin");
+      if (btn) btn.style.display = supported ? "block" : "none";
+      const note = document.getElementById("passkeyLoginNote");
+      if (note) note.innerText = supported
+        ? "Sidik jari hanya berfungsi di perangkat & browser tempat sidik jari didaftarkan. Password tetap bisa dipakai."
+        : "Perangkat/browser ini tidak mendukung sidik jari (WebAuthn), jadi tombol sidik jari disembunyikan. Login password tetap berfungsi.";
+      const card = document.getElementById("passkeyCard");
+      if (card) card.style.display = globalUser ? "block" : "none";
+    }
+    async function pkRefreshPasskeyList() {
+      const listEl = document.getElementById("passkeyList");
+      const countEl = document.getElementById("passkeyCount");
+      if (!listEl) return;
+      try {
+        const res = await callAPI({ action: "passkeyList" });
+        if (!res || res.status !== "success") {
+          if (countEl) countEl.innerText = "Belum ada perangkat terdaftar.";
+          listEl.innerHTML = "";
+          return;
+        }
+        const items = res.passkeys || [];
+        if (countEl) countEl.innerText = items.length ? items.length + " perangkat terdaftar." : "Belum ada perangkat terdaftar.";
+        listEl.innerHTML = items.map(it => {
+          const tgl = it.created ? new Date(it.created).toLocaleDateString("id-ID") : "-";
+          return '<div style="display:flex; justify-content:space-between; gap:8px; padding:6px 0; border-bottom:1px solid #eee;">'
+            + '<span>🔐 ' + escapeHtml(String(it.credentialId).substring(0, 12)) + '… — ' + tgl + '</span>'
+            + '<button type="button" class="btn-danger" style="padding:4px 10px; font-size:12px;" onclick="pkDeletePasskey(\'' + it.credentialId + '\')">Hapus</button></div>';
+        }).join("");
+      } catch (e) { listEl.innerHTML = "<div>Tidak bisa memuat daftar sidik jari.</div>"; }
+    }
+    async function pkDeletePasskey(credentialId) {
+      const ok = await customConfirm("Hapus sidik jari ini dari akun Anda?", "🗑️");
+      if (!ok) return;
+      try {
+        const res = await callAPI({ action: "passkeyDelete", credentialId: credentialId });
+        if (res && res.status === "success") { showToast("Sidik jari dihapus."); pkRefreshPasskeyList(); }
+      } catch (e) { /* callAPI sudah men-toast error */ }
+    }
+    async function registerPasskey() {
+      if (!pkWebAuthnSupported()) { showToast("Perangkat/browser ini tidak mendukung sidik jari (WebAuthn)."); return; }
+      const btn = document.getElementById("btnRegisterPasskey");
+      if (btn) btn.disabled = true;
+      try {
+        const start = await callAPI({ action: "passkeyRegisterStart" });
+        if (!start || start.status !== "success") return; // error sudah di-toast callAPI
+        const cred = await navigator.credentials.create({ publicKey: {
+          rp: { name: "SIBACOT", id: start.rpId },
+          user: { id: pkB64urlDecodeBuf(start.userId), name: start.username, displayName: start.username },
+          challenge: pkB64urlDecodeBuf(start.challenge),
+          pubKeyCredParams: [{ type: "public-key", alg: -7 }], // ES256 saja (v1)
+          authenticatorSelection: { authenticatorAttachment: "platform", userVerification: "preferred", residentKey: "preferred", requireResidentKey: false },
+          timeout: 60000,
+          attestation: "none"
+        }});
+        if (!cred) { showToast("Pendaftaran sidik jari dibatalkan."); return; }
+        const fin = await callAPI({ action: "passkeyRegisterFinish",
+          challengeToken: start.challengeToken,
+          attestationObject: pkB64urlEncodeBuf(cred.response.attestationObject),
+          clientDataJSON: pkB64urlEncodeBuf(cred.response.clientDataJSON),
+          transports: (cred.response.getTransports ? cred.response.getTransports() : []) });
+        if (fin && fin.status === "success") { showToast(fin.message || "Sidik jari berhasil didaftarkan."); pkRefreshPasskeyList(); }
+      } catch (err) {
+        // Error navigator (NotAllowedError saat batal/ditolak, dll) punya
+        // .name sendiri; error callAPI sudah di-toast dan namanya "Error".
+        if (err && err.name && err.name !== "Error") showToast("Sidik jari gagal: " + err.name);
+      } finally { if (btn) btn.disabled = false; }
+    }
+    async function loginWithPasskey() {
+      if (!pkWebAuthnSupported()) { showToast("Perangkat/browser ini tidak mendukung sidik jari (WebAuthn)."); return; }
+      const uInput = document.getElementById("inUser").value.trim();
+      if (!uInput) { showToast("Isi NIP / ID Pengguna dulu, lalu ketuk Masuk dengan sidik jari."); return; }
+      const btn = document.getElementById("btnPasskeyLogin");
+      if (btn) btn.disabled = true;
+      try {
+        const start = await callAPI({ action: "passkeyLoginStart", username: uInput });
+        if (!start || start.status !== "success") return; // error sudah di-toast callAPI
+        const assertion = await navigator.credentials.get({ publicKey: {
+          rpId: start.rpId,
+          challenge: pkB64urlDecodeBuf(start.challenge),
+          allowCredentials: (start.allowCredentials || []).map(c => ({ type: "public-key", id: pkB64urlDecodeBuf(c.id) })),
+          userVerification: "preferred",
+          timeout: 60000
+        }});
+        if (!assertion) { showToast("Login sidik jari dibatalkan."); return; }
+        const fin = await callAPI({ action: "passkeyLoginFinish",
+          username: uInput, challengeToken: start.challengeToken,
+          credentialId: pkB64urlEncodeBuf(assertion.rawId),
+          authenticatorData: pkB64urlEncodeBuf(assertion.response.authenticatorData),
+          clientDataJSON: pkB64urlEncodeBuf(assertion.response.clientDataJSON),
+          signature: pkB64urlEncodeBuf(assertion.response.signature),
+          userHandle: assertion.response.userHandle ? pkB64urlEncodeBuf(assertion.response.userHandle) : "" });
+        if (fin && fin.status === "success" && fin.sessionToken) pkApplyLoginSuccess(fin);
+      } catch (err) {
+        if (err && err.name && err.name !== "Error") showToast("Login sidik jari gagal: " + err.name);
+      } finally { if (btn) btn.disabled = false; }
     }
 
     function doLogout() {
@@ -1135,6 +1340,7 @@
       document.querySelectorAll('.admin-section').forEach(el => el.style.display = 'none');
       document.getElementById("viewAdminDasbor").style.display = "block";
       document.getElementById("fabAdd").style.display = "none";
+      sibacotPushNav(); // 5HAL-TEST: back dari dasbor admin -> checklist
     }
 
     function openAdminMenu(menu) {
@@ -1154,6 +1360,7 @@
       else if (menu === 'identitas') document.getElementById("viewAdminIdentitas").style.display = "block";
       else if (menu === 'sistem') document.getElementById("viewAdminSistem").style.display = "block";
       else if (menu === 'libur') { document.getElementById("viewAdminLibur").style.display = "block"; renderCalendar(); }
+      sibacotPushNav(); // 5HAL-TEST: back dari submenu admin -> dasbor admin
     }
 
     async function loadData() {
@@ -1265,8 +1472,9 @@
           document.getElementById('setLogoLoginBase64').value = "";
           document.getElementById('setLogoHeaderBase64').value = "";
           await loadData();
-        } else showToast("Gagal menyimpan identitas: " + (res.message || "Server error"));
-      } catch(err) { showToast("Gagal menyimpan identitas."); }
+        }
+        // 5HAL-TEST: error sudah di-toast sekali oleh callAPI; jangan toast lagi.
+      } catch(err) { /* callAPI sudah men-toast error jaringan/timeout */ }
       btn.innerText = "Simpan Identitas";
       btn.disabled = false;
     }
@@ -1479,8 +1687,9 @@
           showToast("Hari libur berhasil disimpan!");
           await loadData();
           renderCalendar();
-        } else showToast("Gagal menyimpan hari libur.");
-      } catch (e) { showToast("Gagal menyimpan hari libur."); }
+        }
+        // 5HAL-TEST: error sudah di-toast sekali oleh callAPI; jangan toast lagi.
+      } catch (e) { /* callAPI sudah men-toast error jaringan/timeout */ }
       btn.innerText = "Simpan Kalender Libur";
       btn.disabled = false;
     }
@@ -1557,6 +1766,7 @@
         document.getElementById('userModalTitle').innerText = "Tambah User PIC";
         document.getElementById('inUName').readOnly = false;
       }
+      sibacotPushNav(); // 5HAL-TEST: back saat modal terbuka -> tutup modal
     }
 
     function closeModal(id) { document.getElementById(id).style.display = 'none'; }
@@ -1617,9 +1827,12 @@
       const ok = await customConfirm("Yakin hapus tugas ini secara permanen?", "🗑️");
       if (!ok) return;
       closeModal('taskModal');
-      await callAPI({ action: "deleteTask", ID_Task: id });
+      // 5HAL-TEST: hanya toast sukses bila server benar-benar sukses.
+      // Sebelumnya toast ini tampil apa pun hasil server (termasuk saat
+      // callAPI sudah men-toast error) sehingga satu aksi tampil 2 toast.
+      const delRes = await callAPI({ action: "deleteTask", ID_Task: id });
       loadData();
-      showToast("Tugas dihapus.");
+      if (delRes && delRes.status === "success") showToast("Tugas dihapus.");
     }
 
     async function submitUser() {
@@ -1637,12 +1850,13 @@
         wa: String(document.getElementById('inUWA').value || "").trim(),
         email: document.getElementById('inUEmail').value
       };
-      await callAPI({ action: "saveUser", user: usr });
+      const usrRes = await callAPI({ action: "saveUser", user: usr });
       closeModal('userModal');
       loadData();
       btn.innerText = "Simpan";
       btn.disabled = false;
-      showToast("Data User tersimpan.");
+      // 5HAL-TEST: hanya toast sukses bila server benar-benar sukses.
+      if (usrRes && usrRes.status === "success") showToast("Data User tersimpan.");
     }
 
     function editUser(uname) {
@@ -1664,9 +1878,10 @@
       if (uname === 'admin') { showToast("Admin utama tidak boleh dihapus."); return; }
       const ok = await customConfirm(`Hapus permanen user ${uname}?`, "⚠️");
       if (!ok) return;
-      await callAPI({ action: "deleteUser", username: uname });
+      const delUserRes = await callAPI({ action: "deleteUser", username: uname });
       loadData();
-      showToast("User dihapus.");
+      // 5HAL-TEST: hanya toast sukses bila server benar-benar sukses.
+      if (delUserRes && delUserRes.status === "success") showToast("User dihapus.");
     }
 
     async function saveSettings(e) {
@@ -1674,7 +1889,7 @@
       const btn = e.target.querySelector('button[type="submit"]');
       btn.innerText = "Menerapkan...";
       btn.disabled = true;
-      await callAPI({ action: "saveSettings", settings: {
+      const setRes = await callAPI({ action: "saveSettings", settings: {
         // PATCH: Token_Fonnte sengaja TIDAK dikirim. Backend juga mengabaikannya
         // bila ada. Rotasi token dilakukan pemilik langsung di Sheet.
         // PERBAIKAN PASCA-TEST_CHECKLIST (temuan 1): sama seperti WA user,
@@ -1690,7 +1905,8 @@
         H_Min_Bulanan: document.getElementById("setHBulanan").value,
         H_Min_Tambahan: document.getElementById("setHTambahan").value
       }});
-      showToast("Pengaturan tersimpan.");
+      // 5HAL-TEST: hanya toast sukses bila server benar-benar sukses.
+      if (setRes && setRes.status === "success") showToast("Pengaturan tersimpan.");
       btn.innerText = "Terapkan Pengaturan";
       btn.disabled = false;
       loadData();
@@ -1702,8 +1918,10 @@
       btn.disabled = true;
       try {
         const res = await callAPI({ action: "setupTriggers" });
-        showToast(res.message || (res.status === "success" ? "Trigger berhasil diaktifkan!" : "Gagal."));
-      } catch(e) { showToast("Gagal mengaktifkan trigger."); }
+        // 5HAL-TEST: hanya toast sukses di sini. Pada error, callAPI sudah
+        // men-toast res.message sekali; men-toast lagi = tampil 2x.
+        if (res.status === "success") showToast(res.message || "Trigger berhasil diaktifkan!");
+      } catch(e) { /* callAPI sudah men-toast error jaringan/timeout */ }
       btn.innerText = "⚡ Aktifkan Trigger Otomatis";
       btn.disabled = false;
     }
@@ -1717,8 +1935,9 @@
       const target = channel === 'wa' ? (me && me.wa) : (me && me.email);
       try {
         const res = await callAPI({ action: "testNotif", channel, target });
-        showToast(res.message || (res.status === "success" ? "Berhasil dikirim!" : "Gagal."));
-      } catch(e) { showToast("Gagal mengirim test notifikasi."); }
+        // 5HAL-TEST: hanya toast sukses di sini; error sudah di-toast callAPI.
+        if (res.status === "success") showToast(res.message || "Berhasil dikirim!");
+      } catch(e) { /* callAPI sudah men-toast error jaringan/timeout */ }
       btn.innerText = channel === 'wa' ? "📱 Test WA" : "📧 Test Email";
       btn.disabled = false;
     }
