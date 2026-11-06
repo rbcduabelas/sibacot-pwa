@@ -197,6 +197,15 @@
       margin-top: 10px;
     }
 
+    /* RONDE 2: LOGIN + sidik jari berdampingan satu baris. LOGIN flex 1,
+       tombol sidik jari kotak berisi ikon saja (tanpa teks). Bila WebAuthn
+       tidak didukung, tombol sidik jari disembunyikan dan LOGIN kembali
+       full-width. */
+    .login-actions-row { display: flex; gap: 10px; align-items: stretch; margin-top: 10px; }
+    .login-actions-row .btn-login-custom { flex: 1; width: auto; margin-top: 0; }
+    .login-actions-row .btn-passkey-icon { flex: 0 0 56px; width: 56px; min-width: 56px; padding: 14px 0; margin-top: 0; text-align: center; line-height: 1; }
+    .login-actions-row .btn-passkey-icon svg { display: block; margin: 0 auto; }
+
     /* PASSKEY v1 (TEST ONLY): tombol sidik jari di layar login. */
     .btn-passkey { width: 100%; padding: 14px; background: #fff; color: var(--corp-blue); border: 2px solid var(--corp-gold); border-radius: 8px; font-size: 15px; font-weight: 800; cursor: pointer; margin-top: 4px; }
     .btn-passkey:disabled { opacity: 0.6; cursor: not-allowed; }
@@ -271,7 +280,6 @@
     }
 
     #installAppBtn { display:none; background:var(--corp-gold); color:var(--corp-blue); padding:6px 10px; border-radius:18px; font-size:11px; text-transform:none; letter-spacing:0; white-space:nowrap; }
-    #logoutBtn { background:transparent; color:#fff; border:1px solid rgba(255,255,255,0.6); padding:6px 10px; border-radius:18px; font-size:11px; text-transform:none; letter-spacing:0; white-space:nowrap; }
 
     @media(max-width: 520px) {
       .ent-header { padding: 8px 12px; gap: 8px; }
@@ -470,6 +478,10 @@
     .badge-harian { background: #E3F2FD; color: #1565C0; }
     .badge-mingguan { background: #F3E5F5; color: #6A1B9A; }
     .badge-bulanan { background: #E8F5E9; color: #2E7D32; }
+    /* RONDE 2: badge untuk 3 jenis aktivitas baru. */
+    .badge-triwulan { background: #E0F2F1; color: #00695C; }
+    .badge-semester { background: #EDE7F6; color: #4527A0; }
+    .badge-tahunan { background: #FCE4EC; color: #AD1457; }
     .badge-tambahan { background: #FFF3E0; color: #E65100; }
     .pic-stat-list { display: flex; flex-direction: column; gap: 10px; }
     .pic-stat-item { background: var(--bg-light); border-radius: 8px; padding: 10px 14px; }
@@ -554,10 +566,13 @@
               <input type="password" id="inPass" placeholder="Password" onkeypress="handleEnter(event)">
             </div>
           </div>
-          <button type="button" id="btnLogin" class="btn-login-custom" onclick="doLogin()">LOGIN</button>
-          <!-- PASSKEY v1 (TEST ONLY): login sidik jari, tanpa password. -->
-          <div style="text-align:center; color:#888; font-size:12px; margin:14px 0 8px;">— atau —</div>
-          <button type="button" id="btnPasskeyLogin" class="btn-passkey" onclick="loginWithPasskey()">👆 Masuk dengan sidik jari</button>
+          <!-- RONDE 2: LOGIN + sidik jari berdampingan satu baris. Tombol
+               sidik jari hanya berisi ikon sidik jari (SVG, tanpa teks);
+               id, onclick, dan logika tampil/sembunyi tidak berubah. -->
+          <div class="login-actions-row">
+            <button type="button" id="btnLogin" class="btn-login-custom" onclick="doLogin()">LOGIN</button>
+            <button type="button" id="btnPasskeyLogin" class="btn-passkey btn-passkey-icon" onclick="loginWithPasskey()" aria-label="Masuk dengan sidik jari" title="Masuk dengan sidik jari"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 11a3 3 0 0 1 3 3c0 2.5-.5 5-1.5 7"/><path d="M12 8a6 6 0 0 1 6 6c0 3-.6 6-1.8 8.4"/><path d="M12 5a9 9 0 0 1 9 9c0 3.6-.8 7-2.3 10"/><path d="M6.5 9.5A9 9 0 0 0 3 14c0 3.6.8 7 2.3 10"/><path d="M9.5 10.5A6 6 0 0 0 6 14c0 3 .6 6 1.8 8.4"/><path d="M12 14v7.5"/></svg></button>
+          </div>
           <div id="passkeyLoginNote" style="font-size:11px; color:#888; margin-top:8px; text-align:center;"></div>
         </div>
       </div>
@@ -570,7 +585,6 @@
       <div class="header-right">
         <button id="installAppBtn" type="button" onclick="installPWA()">Install</button>
         <button id="notifBadgeBtn" onclick="toggleNotifPanel()" title="Pengingat Tugas">🔔<span id="notifBadgeCount">0</span></button>
-        <button id="logoutBtn" type="button" onclick="doLogout()" title="Keluar dari aplikasi">Keluar</button>
         <img id="headerAppLogo" onclick="handleLogoTap()" src="https://upload.wikimedia.org/wikipedia/commons/a/a2/Logo_of_Bank_Mandiri.svg" alt="Logo" title="Ketuk 2x untuk logout" onerror="this.src='https://upload.wikimedia.org/wikipedia/commons/a/a2/Logo_of_Bank_Mandiri.svg'">
       </div>
     </header>
@@ -593,6 +607,9 @@
           <div class="card"><h3 class="card-title">AKTIVITAS HARIAN</h3><div class="table-wrap" id="listHarian"></div></div>
           <div class="card"><h3 class="card-title">AKTIVITAS MINGGUAN</h3><div class="table-wrap" id="listMingguan"></div></div>
           <div class="card"><h3 class="card-title">AKTIVITAS BULANAN</h3><div class="table-wrap" id="listBulanan"></div></div>
+          <div class="card"><h3 class="card-title">AKTIVITAS TRIWULAN</h3><div class="table-wrap" id="listTriwulan"></div></div>
+          <div class="card"><h3 class="card-title">AKTIVITAS SEMESTER</h3><div class="table-wrap" id="listSemester"></div></div>
+          <div class="card"><h3 class="card-title">AKTIVITAS TAHUNAN</h3><div class="table-wrap" id="listTahunan"></div></div>
           <div class="card"><h3 class="card-title">AKTIVITAS TAMBAHAN</h3><div class="table-wrap" id="listTambahan"></div></div>
         </div>
       </div>
@@ -714,9 +731,11 @@
             <h4>Jam Kirim Pesan (contoh: 8, 13, 15 — dikirim sekali pada tiap jam tersebut jika tugas belum diceklis)</h4>
             <div class="form-row"><div class="input-group"><label>Harian</label><input type="text" id="setJamHarian"></div><div class="input-group"><label>Mingguan</label><input type="text" id="setJamMingguan"></div></div>
             <div class="form-row"><div class="input-group"><label>Bulanan</label><input type="text" id="setJamBulanan"></div><div class="input-group"><label>Tambahan</label><input type="text" id="setJamTambahan"></div></div>
+            <div class="form-row"><div class="input-group"><label>Triwulan</label><input type="text" id="setJamTriwulan"></div><div class="input-group"><label>Semester</label><input type="text" id="setJamSemester"></div><div class="input-group"><label>Tahunan</label><input type="text" id="setJamTahunan"></div></div>
             <hr>
             <h4>Rentang Hari Peringatan (H-?)</h4>
             <div class="form-row"><div class="input-group"><label>Minggu</label><input type="number" id="setHMingguan"></div><div class="input-group"><label>Bulan</label><input type="number" id="setHBulanan"></div><div class="input-group"><label>Tambah</label><input type="number" id="setHTambahan"></div></div>
+            <div class="form-row"><div class="input-group"><label>Triwulan</label><input type="number" id="setHTriwulan"></div><div class="input-group"><label>Semester</label><input type="number" id="setHSemester"></div><div class="input-group"><label>Tahunan</label><input type="number" id="setHTahunan"></div></div>
             <button type="submit" class="btn-primary block">Terapkan Pengaturan</button>
           </form>
           <hr style="margin:20px 0;">
@@ -742,7 +761,9 @@
           <label>Klasifikasi Waktu</label>
           <select id="inTipe" onchange="handleTipeChange()" required>
             <option value="Harian">Aktivitas Harian</option><option value="Mingguan">Aktivitas Mingguan</option>
-            <option value="Bulanan">Aktivitas Bulanan</option><option value="Tambahan">Aktivitas Tambahan</option>
+            <option value="Bulanan">Aktivitas Bulanan</option><option value="Triwulan">Aktivitas Triwulan</option>
+            <option value="Semester">Aktivitas Semester</option><option value="Tahunan">Aktivitas Tahunan</option>
+            <option value="Tambahan">Aktivitas Tambahan</option>
           </select>
         </div>
         <div class="form-row">
@@ -780,7 +801,11 @@
     </div>
   </div>
 
-  <script src="config.js"></script>
+  <!-- RONDE 2: cache-buster agar service worker tidak menyajikan config.js
+       lama dari cache (akar gagal daftar sidik jari 7 Nov: HTML baru +
+       config lama -> backend v65 -> "Aksi tidak dikenali server.").
+       Versi dinaikkan tiap kali URL backend berubah. -->
+  <script src="config.js?v=66"></script>
   <script>
     // HOTFIX 2026-07-02 ADMIN EDIT OVERDUE
     // PATCH KEAMANAN: kunci penyimpanan lama diganti (semua user wajib login ulang
@@ -831,26 +856,36 @@
       });
     }
 
-    // ==== 5HAL-TEST: tombol back HP (History API, konfirmasi buatan aplikasi) ====
-    // Latar: sebelumnya tidak ada penanganan back sama sekali, sehingga back
-    // HP keluar dari halaman / ke halaman sebelumnya tanpa konfirmasi.
-    // Pola ini meniru Kopikir, tapi di PWA: back menelusuri layar dalam
-    // aplikasi dulu; di layar utama tampil customConfirm "Yakin ingin
-    // keluar?" (BUKAN confirm() native — dialog native ditelan WebView
-    // tanpa WebChromeClient, sehingga confirm() selalu false).
-    // Cara kerja: setiap navigasi maju dalam aplikasi menambah satu entri
-    // history (sibacotPushNav). Saat back ditekan, popstate menavigasi
-    // SATU langkah ke belakang berdasarkan layar yang sedang tampil, lalu
-    // menambah entri lagi agar back berikutnya tetap dicegat. Di layar
-    // login, back TIDAK dicegat (biarkan browser keluar / ke halaman
-    // sebelumnya); catatan: karena ada satu entri seed saat load, back
-    // pertama di layar login hanya menghabiskan entri seed, back kedua
-    // yang benar-benar keluar — perilaku ini disengaja dan dicatat di
-    // checklist uji.
+    // ==== RONDE 2: tombol back HP (History API, konfirmasi buatan aplikasi) ====
+    // Menggantikan blok 5HAL-TEST: pola lama punya dua cacat yang terlihat
+    // di HP pemilik 7 Nov 2026 (back langsung keluar, tanpa konfirmasi):
+    // (1) entri seed di-push sekali saat load; bila back ditekan di layar
+    // login, handler return dini TANPA push ulang sehingga trap hilang
+    // permanen untuk sisa sesi; (2) selama modal konfirmasi terbuka, trap
+    // sedang tidak bersenjata — push baru dilakukan SETELAH customConfirm
+    // resolve — jadi back kedua saat modal terbuka langsung keluar halaman.
+    // Pola baru:
+    // (a) trap dipersenjatai ulang SECARA SINKRON di awal listener
+    // popstate, MENGABAIKAN guard sibacotBackBusy (sibacotRearmTrap) —
+    // sebelum handler async apa pun berjalan;
+    // (b) checkSession memastikan trap hidup setiap kali tampilan
+    // aplikasi dimasuki (flag sibacotTrapLive; bila trap sudah habis
+    // karena back di layar login, di-push ulang saat login berhasil);
+    // (c) di layar login, back TIDAK dicegat dan TIDAK dipersenjatai
+    // ulang — pengguna tetap bisa keluar (back pertama menghabiskan
+    // entri trap, back kedua keluar ke halaman sebelumnya).
+    // Catatan: entri trap yang menumpuk dari navigasi dalam aplikasi
+    // (showAdminDasbor/openAdminMenu/openModal mem-push tiap navigasi)
+    // hanya berarti beberapa kali back ekstra di layar login setelah
+    // logout; itu perilaku lama yang tidak diubah di ronde ini.
     let sibacotBackBusy = false;
+    let sibacotTrapLive = false;
+    function sibacotRearmTrap() {
+      try { history.pushState({ sibacot: 1 }, ""); sibacotTrapLive = true; } catch (e) {}
+    }
     function sibacotPushNav() {
       if (sibacotBackBusy) return;
-      try { history.pushState({ sibacot: 1 }, ""); } catch (e) {}
+      sibacotRearmTrap();
     }
     function sibacotCurrentView() {
       const disp = (id) => { const el = document.getElementById(id); return el ? el.style.display : ""; };
@@ -881,16 +916,25 @@
           openAdminMenu("checklist");
         } else { // checklist = layar utama dalam aplikasi
           const ok = await customConfirm("Yakin ingin keluar?", "🚪");
-          if (ok) { doLogout(); return; } // ke layar login; jangan push lagi
+          if (ok) { doLogout(); return; } // ke layar login; trap sudah dipersenjatai di listener
         }
       } finally {
         sibacotBackBusy = false;
       }
-      sibacotPushNav(); // pulihkan titik cegat untuk back berikutnya
+      // RONDE 2: TIDAK ada push lagi di sini — trap sudah dipersenjatai
+      // ulang secara sinkron di listener popstate sebelum handler jalan.
     }
-    window.addEventListener("popstate", () => { sibacotHandleBack(); });
-    try { history.pushState({ sibacot: 1 }, ""); } catch (e) {}
-    // ==== AKHIR 5HAL-TEST back HP ====
+    window.addEventListener("popstate", () => {
+      // RONDE 2 (a): persenjatai ulang trap DULU, sinkron, sebelum
+      // sibacotHandleBack berjalan — termasuk saat modal konfirmasi
+      // sedang terbuka, sehingga back kedua membatalkan modal, bukan
+      // keluar halaman.
+      if (sibacotCurrentView() !== "login") sibacotRearmTrap();
+      else sibacotTrapLive = false; // entri trap habis di layar login
+      sibacotHandleBack();
+    });
+    sibacotRearmTrap(); // entri seed saat load
+    // ==== AKHIR RONDE 2 back HP ====
 
     const TIMEOUT_MENIT = 3;
     const TIMEOUT_MS = TIMEOUT_MENIT * 60 * 1000;
@@ -939,6 +983,23 @@
       panel.style.display = panel.style.display === 'block' ? 'none' : 'block';
     }
 
+    // RONDE 2: tanggal tenggat berikutnya untuk tipe periode — tanggal
+    // Deadline (1-31) di bulan terakhir periode berjalan, atau periode
+    // berikut bila sudah lewat. Dipakai panel pengingat (pola Bulanan).
+    function nextPeriodDeadline(tipe, targetDay) {
+      const now = new Date();
+      let y = now.getFullYear(), m = now.getMonth() + 1;
+      let em = tipe === "Triwulan" ? Math.floor((m - 1) / 3) * 3 + 3 : (tipe === "Semester" ? (m <= 6 ? 6 : 12) : 12);
+      let d = Math.min(targetDay, new Date(y, em, 0).getDate());
+      if (em === m && d < now.getDate()) {
+        if (tipe === "Triwulan") { em += 3; if (em > 12) { em -= 12; y++; } }
+        else if (tipe === "Semester") { em += 6; if (em > 12) { em -= 12; y++; } }
+        else { y++; em = 12; }
+        d = Math.min(targetDay, new Date(y, em, 0).getDate());
+      }
+      return new Date(y, em - 1, d);
+    }
+
     function updateNotifPanel(tasks) {
       const badgeBtn = document.getElementById('notifBadgeBtn');
       const badgeCount = document.getElementById('notifBadgeCount');
@@ -982,6 +1043,17 @@
           const tomorrowDate = tomorrow.getDate();
           if (td2 === currDate) { label = "Deadline tgl " + t.Deadline + " — HARI INI ⚠️"; cls = "deadline-today"; icon = "⚠️"; }
           else if (td2 === tomorrowDate) { label = "Deadline besok, tgl " + t.Deadline; cls = "upcoming"; icon = "📆"; }
+          else return;
+        } else if (t.Tipe === "Triwulan" || t.Tipe === "Semester" || t.Tipe === "Tahunan") {
+          // RONDE 2: mengikuti pola Bulanan — tenggat berikutnya adalah
+          // tanggal Deadline di bulan terakhir periode berjalan (atau
+          // periode berikut bila sudah lewat).
+          const td3 = parseInt(t.Deadline);
+          if (isNaN(td3)) return;
+          const nextDl = nextPeriodDeadline(t.Tipe, td3);
+          const s3 = Math.round((nextDl - today) / 86400000);
+          if (s3 === 0) { label = "Deadline tgl " + t.Deadline + " — HARI INI ⚠️"; cls = "deadline-today"; icon = "⚠️"; }
+          else if (s3 === 1) { label = "Deadline besok, tgl " + t.Deadline; cls = "upcoming"; icon = "📆"; }
           else return;
         } else if (t.Tipe === "Tambahan") {
           if (!t.Deadline || t.Deadline === "-") return;
@@ -1044,11 +1116,23 @@
 
     window.onerror = function(msg) { showToast("Sistem Gagal: " + msg); };
 
+    // RONDE 2: dedupe toast — pesan yang SAMA PERSIS dalam 1,5 detik
+    // terakhir diabaikan. Sebelum ini dua pemanggilan gagal yang sama
+    // (mis. pkRefreshPasskeyList saat load + percobaan daftar sidik jari
+    // melawan backend lama) menampilkan toast identik dua kali.
+    // Timer sembunyi juga disimpan agar toast baru tidak ikut hilang
+    // oleh timer toast sebelumnya.
+    let lastToastMsg = "", lastToastTime = 0, toastHideTimer = null;
     function showToast(msg) {
+      const now = Date.now();
+      if (msg === lastToastMsg && now - lastToastTime < 1500) return;
+      lastToastMsg = msg;
+      lastToastTime = now;
       const t = document.getElementById("toast");
       t.innerText = msg;
       t.className = "toast show";
-      setTimeout(() => { t.className = t.className.replace("show", ""); }, 4000);
+      if (toastHideTimer) clearTimeout(toastHideTimer);
+      toastHideTimer = setTimeout(() => { t.className = t.className.replace("show", ""); }, 4000);
     }
 
     function callAPI(payload) {
@@ -1135,6 +1219,12 @@
           document.querySelectorAll('.admin-section').forEach(el => el.style.display = 'none');
         }
         resetAutoLogout();
+        // RONDE 2 (b): pastikan trap back hidup setiap kali tampilan
+        // aplikasi dimasuki — menutup cacat lama: back di layar login
+        // menghabiskan entri seed sehingga trap hilang untuk sisa sesi
+        // (mis. back di login, lalu login, lalu back di checklist harus
+        // tetap memunculkan konfirmasi).
+        if (!sibacotTrapLive) sibacotRearmTrap();
         pkUpdatePasskeyUI();
         pkRefreshPasskeyList();
         loadData().finally(() => { const lo = document.getElementById('loadingOverlay'); if (lo) lo.style.display = 'none'; });
@@ -1484,13 +1574,22 @@
       if (tipe === "Harian") return `<span style="color:var(--corp-gold); font-weight:bold;">Tiap Hari</span>`;
       if (tipe === "Mingguan") return `Tiap ${escapeHtml(valForm)}`;
       if (tipe === "Bulanan") return `Tgl ${escapeHtml(valForm)}`;
+      // RONDE 2: teks Tenggat jenis baru (sesuai permintaan pemilik).
+      // Catatan: Bulanan di kode ini menampilkan "Tgl X", bukan
+      // "Tiap Bulan" — teks baru mengikuti pola "Tiap Hari" seperti
+      // yang diminta, bukan pola "Tgl X" Bulanan.
+      if (tipe === "Triwulan") return `<span style="color:var(--corp-gold); font-weight:bold;">Tiap Triwulan</span>`;
+      if (tipe === "Semester") return `<span style="color:var(--corp-gold); font-weight:bold;">Tiap Semester</span>`;
+      if (tipe === "Tahunan") return `<span style="color:var(--corp-gold); font-weight:bold;">Tiap Tahun</span>`;
       return `${formatCompactDate(valForm)}`;
     }
 
     function renderTables(tasks) {
-      const sec = { Harian:[], Mingguan:[], Bulanan:[], Tambahan:[] };
+      // RONDE 2: urutan seksi Harian, Mingguan, Bulanan, Triwulan,
+      // Semester, Tahunan, Tambahan (sesuai permintaan pemilik).
+      const sec = { Harian:[], Mingguan:[], Bulanan:[], Triwulan:[], Semester:[], Tahunan:[], Tambahan:[] };
       tasks.forEach(t => { if (sec[t.Tipe]) sec[t.Tipe].push(t); });
-      ['Harian','Mingguan','Bulanan','Tambahan'].forEach(tipe => {
+      ['Harian','Mingguan','Bulanan','Triwulan','Semester','Tahunan','Tambahan'].forEach(tipe => {
         const container = document.getElementById(`list${tipe}`);
         if (sec[tipe].length === 0) { container.innerHTML = "<div class='empty-state'>Belum ada tugas</div>"; return; }
         let html = "";
@@ -1595,7 +1694,7 @@
         document.getElementById('picStatList').innerHTML = `<div class='empty-state'>Belum ada data.</div>`;
         return;
       }
-      const bc = { Harian:'badge-harian', Mingguan:'badge-mingguan', Bulanan:'badge-bulanan', Tambahan:'badge-tambahan' };
+      const bc = { Harian:'badge-harian', Mingguan:'badge-mingguan', Bulanan:'badge-bulanan', Triwulan:'badge-triwulan', Semester:'badge-semester', Tahunan:'badge-tahunan', Tambahan:'badge-tambahan' };
       const now = new Date();
       let html = `<table><tr><th>Waktu Selesai</th><th>Uraian Tugas</th><th>Tipe</th><th>PIC</th></tr>`;
       filtered.forEach(r => {
@@ -1613,7 +1712,7 @@
       c.innerHTML = html + `</table>`;
       const selesaiPerPic = {};
       filtered.forEach(r => {
-        if (!selesaiPerPic[r.pic]) selesaiPerPic[r.pic] = { harian:0, mingguan:0, bulanan:0, tambahan:0, total:0 };
+        if (!selesaiPerPic[r.pic]) selesaiPerPic[r.pic] = { harian:0, mingguan:0, bulanan:0, triwulan:0, semester:0, tahunan:0, tambahan:0, total:0 };
         const tKey = (r.tipe || '').toLowerCase();
         if (selesaiPerPic[r.pic][tKey] !== undefined) selesaiPerPic[r.pic][tKey]++;
         else selesaiPerPic[r.pic].tambahan++;
@@ -1638,6 +1737,9 @@
           data.harian ? `<span class="badge badge-harian">${data.harian} Harian</span>` : '',
           data.mingguan ? `<span class="badge badge-mingguan">${data.mingguan} Mingguan</span>` : '',
           data.bulanan ? `<span class="badge badge-bulanan">${data.bulanan} Bulanan</span>` : '',
+          data.triwulan ? `<span class="badge badge-triwulan">${data.triwulan} Triwulan</span>` : '',
+          data.semester ? `<span class="badge badge-semester">${data.semester} Semester</span>` : '',
+          data.tahunan ? `<span class="badge badge-tahunan">${data.tahunan} Tahunan</span>` : '',
           data.tambahan ? `<span class="badge badge-tambahan">${data.tambahan} Tambahan</span>` : ''
         ].filter(Boolean).join(' ');
         picHtml += `<div class="pic-stat-item"><div class="pic-stat-header"><span class="pic-stat-name">👤 ${escapeHtml(nama)}</span><span class="pic-stat-count">${data.total} selesai / ${total} tugas &nbsp;<strong style="color:var(--corp-blue);">${pct}%</strong></span></div><div class="progress-bar-wrap"><div class="progress-bar-fill" style="width:${barWidth}%"></div></div><div style="margin-top:6px; display:flex; flex-wrap:wrap; gap:4px;">${tipeSummary}</div></div>`;
@@ -1705,9 +1807,15 @@
       document.getElementById("setJamHarian").value = s.Jam_Notif_Harian || "8, 13, 16";
       document.getElementById("setJamMingguan").value = s.Jam_Notif_Mingguan || "8, 13";
       document.getElementById("setJamBulanan").value = s.Jam_Notif_Bulanan || "8, 13";
+      document.getElementById("setJamTriwulan").value = s.Jam_Notif_Triwulan || "8, 13";
+      document.getElementById("setJamSemester").value = s.Jam_Notif_Semester || "8, 13";
+      document.getElementById("setJamTahunan").value = s.Jam_Notif_Tahunan || "8, 13";
       document.getElementById("setJamTambahan").value = s.Jam_Notif_Tambahan || "8";
       document.getElementById("setHMingguan").value = s.H_Min_Mingguan || 2;
       document.getElementById("setHBulanan").value = s.H_Min_Bulanan || 2;
+      document.getElementById("setHTriwulan").value = s.H_Min_Triwulan || 2;
+      document.getElementById("setHSemester").value = s.H_Min_Semester || 2;
+      document.getElementById("setHTahunan").value = s.H_Min_Tahunan || 2;
       document.getElementById("setHTambahan").value = s.H_Min_Tambahan || 2;
     }
 
@@ -1740,7 +1848,7 @@
       } else {
         wrapDeadline.style.display = "block";
         if (tipe === "Mingguan") container.innerHTML = `<select id="inDeadline" required><option>Senin</option><option>Selasa</option><option>Rabu</option><option>Kamis</option><option>Jumat</option><option>Sabtu</option><option>Minggu</option></select>`;
-        else if (tipe === "Bulanan") container.innerHTML = `<input type="number" id="inDeadline" min="1" max="31" placeholder="Tgl (1-31)" required>`;
+        else if (tipe === "Bulanan" || tipe === "Triwulan" || tipe === "Semester" || tipe === "Tahunan") container.innerHTML = `<input type="number" id="inDeadline" min="1" max="31" placeholder="Tgl (1-31)" required>`;
         else container.innerHTML = `<input type="date" id="inDeadline" required>`;
         if (tipe === "Tambahan") { wrapMulai.style.display = "block"; wrapProgress.style.display = "block"; }
         else { wrapMulai.style.display = "none"; wrapProgress.style.display = "none"; }
@@ -1900,9 +2008,15 @@
         Jam_Notif_Harian: document.getElementById("setJamHarian").value,
         Jam_Notif_Mingguan: document.getElementById("setJamMingguan").value,
         Jam_Notif_Bulanan: document.getElementById("setJamBulanan").value,
+        Jam_Notif_Triwulan: document.getElementById("setJamTriwulan").value,
+        Jam_Notif_Semester: document.getElementById("setJamSemester").value,
+        Jam_Notif_Tahunan: document.getElementById("setJamTahunan").value,
         Jam_Notif_Tambahan: document.getElementById("setJamTambahan").value,
         H_Min_Mingguan: document.getElementById("setHMingguan").value,
         H_Min_Bulanan: document.getElementById("setHBulanan").value,
+        H_Min_Triwulan: document.getElementById("setHTriwulan").value,
+        H_Min_Semester: document.getElementById("setHSemester").value,
+        H_Min_Tahunan: document.getElementById("setHTahunan").value,
         H_Min_Tambahan: document.getElementById("setHTambahan").value
       }});
       // 5HAL-TEST: hanya toast sukses bila server benar-benar sukses.

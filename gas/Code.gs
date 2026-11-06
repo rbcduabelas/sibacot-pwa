@@ -369,8 +369,8 @@ function pkVerifyEs256_(xB64, yB64, msgBytes, sigBytes) {
 }
 
 const ROLES = { ADMIN: "Admin", PIC: "PIC" };
-const TASK_TYPES = ["Harian", "Mingguan", "Bulanan", "Tambahan"];
-const DATA_SHEETS = ["Harian", "Mingguan", "Bulanan", "Tambahan", "Overdue"];
+const TASK_TYPES = ["Harian", "Mingguan", "Bulanan", "Triwulan", "Semester", "Tahunan", "Tambahan"];
+const DATA_SHEETS = ["Harian", "Mingguan", "Bulanan", "Triwulan", "Semester", "Tahunan", "Tambahan", "Overdue"];
 const WEEK_DAYS = { "Minggu": 0, "Senin": 1, "Selasa": 2, "Rabu": 3, "Kamis": 4, "Jumat": 5, "Sabtu": 6 };
 
 function setupTemplate() {
@@ -433,9 +433,15 @@ function setupTemplate() {
       ["Jam_Notif_Harian", "8, 13, 16"],
       ["Jam_Notif_Mingguan", "8, 13"],
       ["Jam_Notif_Bulanan", "8, 13"],
+      ["Jam_Notif_Triwulan", "8, 13"],
+      ["Jam_Notif_Semester", "8, 13"],
+      ["Jam_Notif_Tahunan", "8, 13"],
       ["Jam_Notif_Tambahan", "8"],
       ["H_Min_Mingguan", "2"],
       ["H_Min_Bulanan", "2"],
+      ["H_Min_Triwulan", "2"],
+      ["H_Min_Semester", "2"],
+      ["H_Min_Tahunan", "2"],
       ["H_Min_Tambahan", "2"]
     ];
     shSet.getRange(2, 1, defaultSettings.length, 2).setValues(defaultSettings);
@@ -542,9 +548,13 @@ function validateTaskPayload_(payload) {
   const deadline = String(payload.Deadline || "").trim();
   if (tipe === "Harian") return null;
   if (tipe === "Mingguan" && !Object.prototype.hasOwnProperty.call(WEEK_DAYS, deadline)) return "Deadline mingguan harus berupa nama hari yang valid.";
-  if (tipe === "Bulanan") {
+  // RONDE 2: Triwulan/Semester/Tahunan mengikuti pola Bulanan — deadline
+  // adalah angka tanggal 1-31 yang berlaku di bulan terakhir periode itu
+  // (triwulan: Mar/Jun/Sep/Des; semester: Jun/Des; tahunan: Des).
+  // Asumsi ini dicatat di CATATAN-RONDE2.md.
+  if (tipe === "Bulanan" || tipe === "Triwulan" || tipe === "Semester" || tipe === "Tahunan") {
     const n = parseInt(deadline, 10);
-    if (isNaN(n) || n < 1 || n > 31) return "Deadline bulanan harus angka 1 sampai 31.";
+    if (isNaN(n) || n < 1 || n > 31) return "Deadline " + tipe.toLowerCase() + " harus angka 1 sampai 31.";
   }
   if (tipe === "Tambahan") {
     if (!isValidYmd_(deadline)) return "Deadline tambahan harus tanggal valid format yyyy-MM-dd.";
@@ -703,6 +713,46 @@ function endOfMonthYmd_(ymd) {
   const end = new Date(d.getFullYear(), d.getMonth() + 1, 0);
   return Utilities.formatDate(end, APP_TZ, "yyyy-MM-dd");
 }
+// RONDE 2 (7 Nov 2026): kunci & bulan akhir periode untuk
+// Triwulan/Semester/Tahunan. Deadline ketiga tipe ini adalah angka
+// tanggal 1-31 di BULAN TERAKHIR periode (triwulan: Mar/Jun/Sep/Des;
+// semester: Jun/Des; tahunan: Des) — mengikuti pola Bulanan.
+function periodEndMonth_(tipe, month1Based) {
+  if (tipe === "Triwulan") return Math.floor((month1Based - 1) / 3) * 3 + 3;
+  if (tipe === "Semester") return month1Based <= 6 ? 6 : 12;
+  if (tipe === "Tahunan") return 12;
+  return month1Based;
+}
+function quarterKeyYmd_(ymd) {
+  const p = String(ymd || "").split("-").map(Number);
+  if (p.length !== 3 || p.some(isNaN)) return "";
+  return p[0] + "-Q" + (Math.floor((p[1] - 1) / 3) + 1);
+}
+function semesterKeyYmd_(ymd) {
+  const p = String(ymd || "").split("-").map(Number);
+  if (p.length !== 3 || p.some(isNaN)) return "";
+  return p[0] + "-S" + (p[1] <= 6 ? 1 : 2);
+}
+function yearKeyYmd_(ymd) {
+  return String(ymd || "").substring(0, 4);
+}
+function nextPeriodDeadlineDate_(tipe, targetDay, now) {
+  // Tanggal tenggat BERIKUTNYA untuk tipe periode: tanggal targetDay di
+  // bulan terakhir periode berjalan, atau periode berikutnya bila sudah
+  // lewat. Dipakai prosesReminder (mengikuti pola Bulanan).
+  const y0 = parseInt(Utilities.formatDate(now, APP_TZ, "yyyy"), 10);
+  const m0 = parseInt(Utilities.formatDate(now, APP_TZ, "M"), 10);
+  const d0 = parseInt(Utilities.formatDate(now, APP_TZ, "d"), 10);
+  let ey = y0, em = periodEndMonth_(tipe, m0);
+  let day = Math.min(targetDay, daysInMonth_(ey, em));
+  if (em === m0 && day < d0) {
+    if (tipe === "Triwulan") { em += 3; if (em > 12) { em -= 12; ey++; } }
+    else if (tipe === "Semester") { em += 6; if (em > 12) { em -= 12; ey++; } }
+    else { ey++; em = 12; }
+    day = Math.min(targetDay, daysInMonth_(ey, em));
+  }
+  return new Date(ey, em - 1, day);
+}
 function shouldShowTaskForPeriod_(row, today, todayYmd, isTodayHoliday) {
   const id = String(row[0] || "");
   const tipe = row[2];
@@ -732,6 +782,22 @@ function shouldShowTaskForPeriod_(row, today, todayYmd, isTodayHoliday) {
     // Jika sudah lewat tenggat bulan ini dan belum selesai, tugas aktif disembunyikan sampai bulan berikutnya.
     if (status !== "Selesai" && dayNow > targetDate) return false;
     // Jika sudah selesai, tetap tampil terceklis sampai bulan baru.
+    return true;
+  }
+  if (tipe === "Triwulan" || tipe === "Semester" || tipe === "Tahunan") {
+    // RONDE 2: mengikuti pola Bulanan, tapi terhadap periode jenis itu.
+    // Tenggat hanya berlaku di bulan terakhir periode; di bulan lain
+    // periode masih berjalan, jadi tugas tetap tampil. Bila belum selesai
+    // dan sudah lewat tenggat di bulan terakhir, tugas disembunyikan
+    // sampai periode berikutnya; bila selesai, tetap tampil terceklis
+    // sampai periode baru.
+    const dayNow = parseInt(Utilities.formatDate(today, APP_TZ, "d"), 10);
+    const monthNow = parseInt(Utilities.formatDate(today, APP_TZ, "M"), 10);
+    const yearNow = parseInt(Utilities.formatDate(today, APP_TZ, "yyyy"), 10);
+    const endMonth = periodEndMonth_(tipe, monthNow);
+    if (monthNow !== endMonth) return true;
+    const targetDate = Math.min(parseInt(deadline, 10) || 1, daysInMonth_(yearNow, monthNow));
+    if (status !== "Selesai" && dayNow > targetDate) return false;
     return true;
   }
   if (tipe === "Tambahan") {
@@ -781,13 +847,18 @@ function shouldDeleteCompletedOverdue_(tipe, completedYmd, todayYmd) {
   if (tipe === "Mingguan") return startOfWeekYmd_(completedYmd) < startOfWeekYmd_(todayYmd);
   if (tipe === "Bulanan") return monthKeyYmd_(completedYmd) < monthKeyYmd_(todayYmd);
   if (tipe === "Tambahan") return monthKeyYmd_(completedYmd) < monthKeyYmd_(todayYmd);
+  // RONDE 2: periode berikutnya = periode jenis itu (bukan bulan).
+  if (tipe === "Triwulan") return quarterKeyYmd_(completedYmd) < quarterKeyYmd_(todayYmd);
+  if (tipe === "Semester") return semesterKeyYmd_(completedYmd) < semesterKeyYmd_(todayYmd);
+  if (tipe === "Tahunan") return yearKeyYmd_(completedYmd) < yearKeyYmd_(todayYmd);
   return completedYmd < todayYmd;
 }
 function cleanupCompletedOverdue_(ss, todayYmd) {
   // KOREKSI 29 Okt 2026 (membalikkan penahanan 5HAL-TEST sebelumnya):
   // arah yang benar dari om: overdue yang sudah diceklis HARUS HILANG di
   // periode berikutnya (Harian: hari berikutnya, Mingguan: minggu
-  // berikutnya, Bulanan/Tambahan: bulan berikutnya). Fungsi ini
+  // berikutnya, Bulanan/Tambahan: bulan berikutnya, Triwulan: triwulan
+  // berikutnya, Semester: semester berikutnya, Tahunan: tahun berikutnya).
   // dikembalikan ke logika penghapusan semula, ditambah dua jaring
   // pengaman yang TIDAK mengubah aturan periode di atas:
   // (1) bila Rekapan tidak punya entri untuk ID Overdue (OVD-...),
@@ -1140,8 +1211,10 @@ function prosesAPI(payload) {
       // Admin mendapat tambahan No_WA_Admin + jadwal notifikasi; token gateway
       // tetap TIDAK PERNAH dikembalikan ke client mana pun.
       const NON_SENSITIVE_SETTINGS = ["No_WA_Admin", "Gunakan_WA", "Gunakan_Email",
-        "Jam_Notif_Harian", "Jam_Notif_Mingguan", "Jam_Notif_Bulanan", "Jam_Notif_Tambahan",
-        "H_Min_Mingguan", "H_Min_Bulanan", "H_Min_Tambahan"];
+        "Jam_Notif_Harian", "Jam_Notif_Mingguan", "Jam_Notif_Bulanan", "Jam_Notif_Triwulan",
+        "Jam_Notif_Semester", "Jam_Notif_Tahunan", "Jam_Notif_Tambahan",
+        "H_Min_Mingguan", "H_Min_Bulanan", "H_Min_Triwulan", "H_Min_Semester",
+        "H_Min_Tahunan", "H_Min_Tambahan"];
       let settingsObj = {};
       for (let i = 1; i < settingsRaw.length; i++) {
         if (sessionUser.role === "Admin" && NON_SENSITIVE_SETTINGS.includes(settingsRaw[i][0])) {
@@ -1351,8 +1424,10 @@ function prosesAPI(payload) {
       // (dan tidak pernah dikirim kembali oleh getData). Rotasi token dilakukan
       // pemilik langsung di Sheet Settings — lihat ROTASI_LIVE.md.
       const ALLOWED_SETTINGS = ["No_WA_Admin", "Gunakan_WA", "Gunakan_Email",
-        "Jam_Notif_Harian", "Jam_Notif_Mingguan", "Jam_Notif_Bulanan", "Jam_Notif_Tambahan",
-        "H_Min_Mingguan", "H_Min_Bulanan", "H_Min_Tambahan"];
+        "Jam_Notif_Harian", "Jam_Notif_Mingguan", "Jam_Notif_Bulanan", "Jam_Notif_Triwulan",
+        "Jam_Notif_Semester", "Jam_Notif_Tahunan", "Jam_Notif_Tambahan",
+        "H_Min_Mingguan", "H_Min_Bulanan", "H_Min_Triwulan", "H_Min_Semester",
+        "H_Min_Tahunan", "H_Min_Tambahan"];
       const data = sheet.getDataRange().getValues();
       for (let i = 1; i < data.length; i++) {
         const key = data[i][0];
@@ -1557,6 +1632,38 @@ function setelUlangPasswordAdminDariProperties() {
   throw new Error("Username reset tidak ditemukan di sheet Users.");
 }
 
+// RONDE 2: reset generik untuk tipe berbasis periode (Triwulan /
+// Semester / Tahunan), mengikuti pola blok Bulanan di bawah.
+// endMonths = bulan terakhir tiap periode; startMonths = bulan pertama
+// periode baru. Deadline = tgl 1-31 di bulan terakhir periode.
+// - Bila kemarin adalah tanggal tenggat di bulan terakhir periode dan
+//   tugas belum selesai -> dibuatkan baris Overdue.
+// - Bila hari ini tanggal 1 bulan pertama periode baru dan tugas
+//   Selesai -> status dikembalikan ke "Belum".
+function resetTipePeriode_(ss, sheetName, endMonths, startMonths, now, yesterday, yesterdayYmd) {
+  const sh = ss.getSheetByName(sheetName);
+  if (!sh || sh.getLastRow() < 2) return;
+  const yestMonth = parseInt(Utilities.formatDate(yesterday, APP_TZ, "M"), 10);
+  const yestYear = parseInt(Utilities.formatDate(yesterday, APP_TZ, "yyyy"), 10);
+  const yestDate = parseInt(Utilities.formatDate(yesterday, APP_TZ, "d"), 10);
+  const todayDate = parseInt(Utilities.formatDate(now, APP_TZ, "d"), 10);
+  const todayMonth = parseInt(Utilities.formatDate(now, APP_TZ, "M"), 10);
+  const yestIsPeriodEnd = endMonths.indexOf(yestMonth) !== -1;
+  const todayIsPeriodStart = todayDate === 1 && startMonths.indexOf(todayMonth) !== -1;
+  if (!yestIsPeriodEnd && !todayIsPeriodStart) return;
+  const data = sh.getDataRange().getValues();
+  const lastDayYestMonth = daysInMonth_(yestYear, yestMonth);
+  for (let i = 1; i < data.length; i++) {
+    const rawTarget = parseInt(data[i][3], 10);
+    const targetDate = Math.min(isNaN(rawTarget) ? 1 : rawTarget, lastDayYestMonth);
+    const status = data[i][5];
+    if (yestIsPeriodEnd && targetDate === yestDate && status !== "Selesai") {
+      createOverdueTask_(ss, data[i], yesterdayYmd, Utilities.formatDate(yesterday, APP_TZ, "dd/MM/yyyy"));
+    }
+    if (todayIsPeriodStart && status === "Selesai") sh.getRange(i + 1, 6).setValue("Belum");
+  }
+}
+
 function resetTugasBerulang() {
   const ss = openSpreadsheet_();
   ensureOverdueSheet_(ss);
@@ -1613,6 +1720,13 @@ function resetTugasBerulang() {
       if (todayDate === 1 && status === "Selesai") shBulanan.getRange(i + 1, 6).setValue("Belum");
     }
   }
+
+  // RONDE 2: Triwulan reset saat triwulan baru (tgl 1 Jan/Apr/Jul/Okt),
+  // Semester saat semester baru (tgl 1 Jan & Jul), Tahunan saat 1 Jan.
+  // Tugas selesai tetap terceklis sampai periode baru (pola Bulanan).
+  resetTipePeriode_(ss, "Triwulan", [3, 6, 9, 12], [1, 4, 7, 10], now, yesterday, yesterdayYmd);
+  resetTipePeriode_(ss, "Semester", [6, 12], [1, 7], now, yesterday, yesterdayYmd);
+  resetTipePeriode_(ss, "Tahunan", [12], [1], now, yesterday, yesterdayYmd);
 
   // Tambahan: lewat tenggat pindah ke Overdue; selesai tampil sampai akhir bulan tenggat.
   cleanupAndMoveTambahan_(ss, todayYmd);
@@ -1685,6 +1799,23 @@ function prosesReminder() {
         selisihHari = targetDate >= currDate ? targetDate - currDate : daysInMonth - currDate + targetDate;
         isHariH = selisihHari === 0;
         tglStr = isOverdueTask ? `Overdue sejak ${formatTanggal(deadline).tampil}` : `Tanggal ${deadline} setiap bulan`;
+      } else if (tipe === "Triwulan" || tipe === "Semester" || tipe === "Tahunan") {
+        // RONDE 2: mengikuti pola Bulanan — tenggat berikutnya adalah
+        // tanggal Deadline di bulan terakhir periode berjalan (atau
+        // periode berikut bila sudah lewat).
+        if (isOverdueTask) {
+          selisihHari = 0;
+          isHariH = true;
+          tglStr = `Overdue sejak ${formatTanggal(deadline).tampil}`;
+        } else {
+          const targetDate = parseInt(deadline);
+          if (isNaN(targetDate)) continue;
+          const nextDl = nextPeriodDeadlineDate_(tipe, targetDate, now);
+          selisihHari = Math.round((nextDl - hariIniLocal) / 86400000);
+          isHariH = selisihHari === 0;
+          const labelPeriode = tipe === "Triwulan" ? "setiap triwulan" : (tipe === "Semester" ? "setiap semester" : "setiap tahun");
+          tglStr = `Tanggal ${deadline} ${labelPeriode}`;
+        }
       } else if (tipe === "Tambahan") {
         if (!deadline) continue;
         const deadlineObj = deadline instanceof Date ? deadline : new Date(String(deadline).substring(0, 10) + "T00:00:00");
