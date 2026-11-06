@@ -92,6 +92,282 @@ function hashPasswordWithSalt_(password, salt) {
 
 function newSalt_() { return Utilities.getUuid(); }
 
+// ============================================================================
+// PASSKEY / WebAuthn v1 — HANYA SALINAN UJI (test-5hal), TIDAK DI PRODUKSI.
+// Model: login pertama tetap password; setelah login, user mendaftarkan
+// perangkat ini (sidik jari/face unlock); login berikutnya di perangkat +
+// browser yang sama bisa pakai sidik jari tanpa password; password tetap
+// berfungsi sebagai fallback; satu passkey hanya berlaku di perangkat/
+// browser tempat ia didaftarkan (non-discoverable, allowCredentials).
+//
+// Yang DIVERIFIKASI server secara kriptografi (diuji di Node, lihat
+// PASSKEY-TEST.md):
+//  - challenge acak sekali pakai (5 menit, terikat username + jenis aksi),
+//    clientDataJSON (type + challenge + origin yang diizinkan),
+//    rpIdHash di authenticatorData, flag User Presence,
+//    counter anti-replay, dan TANDA TANGAN ES256 assertion memakai
+//    verifikasi ECDSA P-256 penuh (BigInt, runtime V8 Apps Script).
+// Yang TIDAK diverifikasi penuh (batasan jujur v1):
+//  - Attestation saat pendaftaran: fmt "none" diterima apa adanya dan
+//    fmt "packed" hanya diverifikasi bila self-attestation (tanpa x5c).
+//    Artinya pendaftaran mempercayai upacara WebAuthn di browser +
+//    sesi password yang sudah login — penyerang yang sudah memegang sesi
+//    password korban tetap bisa mendaftarkan kuncinya sendiri. Itu
+//    sebabnya v1 ini HANYA untuk uji, bukan klaim aman penuh.
+//  - Kunci publik disimpan sebagai X/Y mentah di sheet Passkeys (bukan
+//    di HSM/enkripsi khusus); hapus barisnya = cabut passkey itu.
+//  - Tidak ada rate limiting untuk passkeyLoginStart (username yang
+//    belum punya passkey akan dijawab begitu — enumerasi ringan).
+// Konfigurasi (Script Properties, opsional): PK_RP_ID (default
+// rbcduabelas.github.io), PK_ALLOWED_ORIGINS (default
+// https://rbcduabelas.github.io, pisahkan koma bila lebih dari satu).
+// ============================================================================
+const PASSKEY_SHEET = "Passkeys";
+const PK_CHALLENGE_TTL_MS = 5 * 60 * 1000; // 5 menit
+const PK_P = BigInt("0xFFFFFFFF00000001000000000000000000000000FFFFFFFFFFFFFFFFFFFFFFFF");
+const PK_N = BigInt("0xFFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551");
+const PK_GX = BigInt("0x6B17D1F2E12C4247F8BCE6E563A440F277037D812DEB33A0F4A13945D898C296");
+const PK_GY = BigInt("0x4FE342E2FE1A7F9B8EE7EB4A7C0F9E162BCE33576B315ECECBB6406837BF51F5");
+
+function pkRpId_() {
+  return String(PropertiesService.getScriptProperties().getProperty("PK_RP_ID") || "rbcduabelas.github.io").trim();
+}
+function pkAllowedOrigins_() {
+  const raw = String(PropertiesService.getScriptProperties().getProperty("PK_ALLOWED_ORIGINS") || "https://rbcduabelas.github.io");
+  return raw.split(",").map(function (s) { return s.trim(); }).filter(function (s) { return !!s; });
+}
+function pkBytesToHex_(bytes) {
+  return bytes.map(function (b) { return (b < 0 ? b + 256 : b).toString(16).padStart(2, "0"); }).join("");
+}
+function pkHexToBytes_(hex) {
+  const out = [];
+  for (let i = 0; i < hex.length; i += 2) out.push(parseInt(hex.substring(i, i + 2), 16));
+  return out;
+}
+function pkBytesToBigInt_(bytes) {
+  const hex = pkBytesToHex_(bytes);
+  return hex ? BigInt("0x" + hex) : BigInt(0);
+}
+function pkB64urlEncode_(bytes) {
+  const arr = bytes.map(function (b) { return b < 0 ? b + 256 : b; });
+  return Utilities.base64EncodeWebSafe(arr).replace(/=+$/, "");
+}
+function pkB64urlDecode_(s) {
+  let t = String(s || "").replace(/-/g, "+").replace(/_/g, "/");
+  while (t.length % 4) t += "=";
+  return Utilities.base64Decode(t).map(function (b) { return b < 0 ? b + 256 : b; });
+}
+function pkStringToBytes_(str) {
+  return Utilities.newBlob(String(str || ""), "text/plain").getBytes().map(function (b) { return b < 0 ? b + 256 : b; });
+}
+function pkBytesToString_(bytes) {
+  return Utilities.newBlob(bytes, "application/json").getDataAsString();
+}
+function pkSha256_(bytes) {
+  return Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, bytes, Utilities.Charset.UTF_8).map(function (b) { return b < 0 ? b + 256 : b; });
+}
+
+// --- Challenge sekali pakai (disimpan di Script Properties, 5 menit) ---
+function pkStoreChallenge_(username, kind) {
+  const challenge = [];
+  for (let i = 0; i < 32; i++) challenge.push(Math.floor(Math.random() * 256));
+  const token = Utilities.getUuid();
+  PropertiesService.getScriptProperties().setProperty("PKCH_" + token, JSON.stringify({
+    username: username, kind: kind,
+    challenge: pkB64urlEncode_(challenge),
+    expires: new Date().getTime() + PK_CHALLENGE_TTL_MS
+  }));
+  return { token: token, challenge: pkB64urlEncode_(challenge) };
+}
+function pkConsumeChallenge_(token, username, kind) {
+  const key = "PKCH_" + String(token || "");
+  const raw = PropertiesService.getScriptProperties().getProperty(key);
+  if (!raw) throw new Error("Passkey: challenge tidak ditemukan atau sudah dipakai. Ulangi dari awal.");
+  PropertiesService.getScriptProperties().deleteProperty(key);
+  const rec = JSON.parse(raw);
+  if (rec.username !== username || rec.kind !== kind) throw new Error("Passkey: challenge tidak cocok dengan aksi ini.");
+  if (new Date().getTime() > Number(rec.expires || 0)) throw new Error("Passkey: challenge kedaluwarsa (lebih dari 5 menit). Ulangi dari awal.");
+  return rec.challenge;
+}
+
+// --- Sheet Passkeys ---
+function ensurePasskeysSheet_(ss) {
+  let sh = ss.getSheetByName(PASSKEY_SHEET);
+  const header = [["Username", "CredentialId", "PubKeyX", "PubKeyY", "Counter", "Created_Millis", "AAGUID"]];
+  if (!sh) {
+    sh = ss.insertSheet(PASSKEY_SHEET);
+    sh.getRange("A1:G1").setValues(header);
+  } else if (sh.getLastRow() === 0) {
+    sh.getRange("A1:G1").setValues(header);
+  }
+  return sh;
+}
+function pkFindCredential_(ss, credentialId) {
+  const sh = ss.getSheetByName(PASSKEY_SHEET);
+  if (!sh || sh.getLastRow() < 2) return null;
+  const data = sh.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][1]) === String(credentialId)) {
+      return { row: i + 1, username: String(data[i][0]), credentialId: String(data[i][1]),
+        x: String(data[i][2]), y: String(data[i][3]), counter: Number(data[i][4]) || 0,
+        created: Number(data[i][5]) || 0, aaguid: String(data[i][6] || "") };
+    }
+  }
+  return null;
+}
+function pkListForUser_(ss, username) {
+  const sh = ss.getSheetByName(PASSKEY_SHEET);
+  const out = [];
+  if (!sh || sh.getLastRow() < 2) return out;
+  const data = sh.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][0]) === String(username)) {
+      out.push({ credentialId: String(data[i][1]), counter: Number(data[i][4]) || 0,
+        created: Number(data[i][5]) || 0, aaguid: String(data[i][6] || "") });
+    }
+  }
+  return out;
+}
+
+// --- CBOR minimal (decoder saja; cukup untuk attestationObject) ---
+// Mendukung major type 0/1 (int), 2 (bytes), 3 (teks ASCII), 4 (array),
+// 5 (map), 7 (false/true/null). Float dan tag tidak didukung — sengaja,
+// attestationObject WebAuthn tidak memakainya.
+function pkCborDecode_(bytes, pos) {
+  const initial = bytes[pos];
+  const mt = initial >> 5, ai = initial & 31;
+  let p = pos + 1, n;
+  if (ai < 24) n = ai;
+  else if (ai === 24) { n = bytes[p]; p += 1; }
+  else if (ai === 25) { n = (bytes[p] << 8) | bytes[p + 1]; p += 2; }
+  else if (ai === 26) { n = ((bytes[p] * 256 + bytes[p + 1]) * 256 + bytes[p + 2]) * 256 + bytes[p + 3]; p += 4; }
+  else if (ai === 27) {
+    const hi = ((bytes[p] * 256 + bytes[p + 1]) * 256 + bytes[p + 2]) * 256 + bytes[p + 3];
+    const lo = ((bytes[p + 4] * 256 + bytes[p + 5]) * 256 + bytes[p + 6]) * 256 + bytes[p + 7];
+    n = hi * 4294967296 + lo; p += 8;
+  } else throw new Error("CBOR: additional info " + ai + " tidak didukung (v1).");
+  if (mt === 0) return [n, p];
+  if (mt === 1) return [-1 - n, p];
+  if (mt === 2) return [bytes.slice(p, p + n), p + n];
+  if (mt === 3) {
+    let str = "";
+    for (let i = 0; i < n; i++) str += String.fromCharCode(bytes[p + i]);
+    return [str, p + n];
+  }
+  if (mt === 4) {
+    const arr = [];
+    for (let i = 0; i < n; i++) { const r = pkCborDecode_(bytes, p); arr.push(r[0]); p = r[1]; }
+    return [arr, p];
+  }
+  if (mt === 5) {
+    const obj = {};
+    for (let i = 0; i < n; i++) {
+      const kr = pkCborDecode_(bytes, p); p = kr[1];
+      const vr = pkCborDecode_(bytes, p); p = vr[1];
+      obj[String(kr[0])] = vr[0];
+    }
+    return [obj, p];
+  }
+  if (mt === 7) {
+    if (n === 20) return [false, p];
+    if (n === 21) return [true, p];
+    if (n === 22) return [null, p];
+    if (n === 23) return [undefined, p];
+    throw new Error("CBOR: nilai simple/float tidak didukung (v1).");
+  }
+  throw new Error("CBOR: major type " + mt + " tidak didukung (v1).");
+}
+
+// --- Authenticator data + COSE key ---
+function pkParseAuthData_(authData, expectRpIdHash) {
+  if (!authData || authData.length < 37) throw new Error("Passkey: authenticatorData terlalu pendek.");
+  const rpIdHash = authData.slice(0, 32);
+  if (pkBytesToHex_(rpIdHash) !== pkBytesToHex_(expectRpIdHash)) throw new Error("Passkey: rpIdHash tidak cocok.");
+  const flags = authData[32];
+  if (!(flags & 0x01)) throw new Error("Passkey: authenticator tidak mengonfirmasi kehadiran user (UP).");
+  const counter = ((authData[33] * 256 + authData[34]) * 256 + authData[35]) * 256 + authData[36];
+  let credential = null;
+  if (flags & 0x40) { // AT: ada attested credential data
+    let p = 37;
+    const aaguid = authData.slice(p, p + 16); p += 16;
+    const credLen = (authData[p] << 8) | authData[p + 1]; p += 2;
+    if (credLen <= 0 || p + credLen > authData.length) throw new Error("Passkey: panjang credentialId tidak valid.");
+    const credId = authData.slice(p, p + credLen); p += credLen;
+    const cose = pkCborDecode_(authData, p)[0];
+    // COSE key: 1=kty (2=EC2), 3=alg (-7=ES256), -1=crv (1=P-256), -2=x, -3=y
+    if (cose["1"] !== 2 || cose["3"] !== -7 || cose["-1"] !== 1) {
+      throw new Error("Passkey v1: hanya kunci EC P-256 ES256 yang didukung.");
+    }
+    const x = cose["-2"], y = cose["-3"];
+    if (!x || !y || x.length !== 32 || y.length !== 32) throw new Error("Passkey: kunci publik tidak lengkap.");
+    credential = { credentialId: pkB64urlEncode_(credId), x: pkB64urlEncode_(x), y: pkB64urlEncode_(y), aaguid: pkBytesToHex_(aaguid) };
+  }
+  return { flags: flags, counter: counter, credential: credential };
+}
+
+function pkVerifyClientData_(clientDataB64, expectedType, expectedChallengeB64) {
+  const bytes = pkB64urlDecode_(clientDataB64);
+  let cd;
+  try { cd = JSON.parse(pkBytesToString_(bytes)); } catch (e) { throw new Error("Passkey: clientDataJSON tidak bisa dibaca."); }
+  if (cd.type !== expectedType) throw new Error("Passkey: tipe clientData salah (" + cd.type + ").");
+  if (cd.challenge !== expectedChallengeB64) throw new Error("Passkey: challenge tidak cocok.");
+  if (pkAllowedOrigins_().indexOf(cd.origin) === -1) throw new Error("Passkey: origin tidak diizinkan: " + cd.origin);
+  return cd;
+}
+
+// --- ECDSA P-256 / ES256 (verifikasi tanda tangan, BigInt) ---
+function pkMod_(a, m) { const r = a % m; return r >= BigInt(0) ? r : r + m; }
+function pkModInv_(a, m) {
+  let oldR = pkMod_(a, m), r = m, oldS = BigInt(1), s = BigInt(0);
+  while (r !== BigInt(0)) {
+    const q = oldR / r;
+    const tR = oldR; oldR = r; r = tR - q * r;
+    const tS = oldS; oldS = s; s = tS - q * s;
+  }
+  if (oldR !== BigInt(1)) throw new Error("Passkey: invers modular tidak ada.");
+  return pkMod_(oldS, m);
+}
+function pkPointAdd_(P, Q) {
+  if (!P) return Q;
+  if (!Q) return P;
+  const x1 = P[0], y1 = P[1], x2 = Q[0], y2 = Q[1];
+  let lam;
+  if (x1 === x2) {
+    if (pkMod_(y1 + y2, PK_P) === BigInt(0)) return null;
+    lam = pkMod_((BigInt(3) * x1 * x1 - BigInt(3)) * pkModInv_(BigInt(2) * y1, PK_P), PK_P); // a = -3
+  } else {
+    lam = pkMod_((y2 - y1) * pkModInv_(x2 - x1, PK_P), PK_P);
+  }
+  const x3 = pkMod_(lam * lam - x1 - x2, PK_P);
+  const y3 = pkMod_(lam * (x1 - x3) - y1, PK_P);
+  return [x3, y3];
+}
+function pkPointMul_(k, P) {
+  let R = null, A = P;
+  while (k > BigInt(0)) {
+    if (k & BigInt(1)) R = pkPointAdd_(R, A);
+    A = pkPointAdd_(A, A);
+    k >>= BigInt(1);
+  }
+  return R;
+}
+function pkVerifyEs256_(xB64, yB64, msgBytes, sigBytes) {
+  try {
+    if (!sigBytes || sigBytes.length !== 64) return false;
+    const r = pkBytesToBigInt_(sigBytes.slice(0, 32));
+    const s = pkBytesToBigInt_(sigBytes.slice(32, 64));
+    if (r <= BigInt(0) || r >= PK_N || s <= BigInt(0) || s >= PK_N) return false;
+    const e = pkBytesToBigInt_(pkSha256_(msgBytes)) % PK_N;
+    const w = pkModInv_(s, PK_N);
+    const u1 = pkMod_(e * w, PK_N);
+    const u2 = pkMod_(r * w, PK_N);
+    const Q = [pkBytesToBigInt_(pkB64urlDecode_(xB64)), pkBytesToBigInt_(pkB64urlDecode_(yB64))];
+    const point = pkPointAdd_(pkPointMul_(u1, [PK_GX, PK_GY]), pkPointMul_(u2, Q));
+    if (!point) return false;
+    return pkMod_(point[0], PK_N) === r;
+  } catch (e) { return false; }
+}
+
 const ROLES = { ADMIN: "Admin", PIC: "PIC" };
 const TASK_TYPES = ["Harian", "Mingguan", "Bulanan", "Tambahan"];
 const DATA_SHEETS = ["Harian", "Mingguan", "Bulanan", "Tambahan", "Overdue"];
@@ -185,6 +461,8 @@ function setupTemplate() {
       if (setRows[i][0] === "No_WA_Admin") shSet.getRange(i + 1, 2).setNumberFormat("@");
     }
   }
+  // PASSKEY v1 (TEST ONLY): siapkan sheet Passkeys bila belum ada.
+  ensurePasskeysSheet_(ss);
   SpreadsheetApp.flush();
 }
 
@@ -506,18 +784,51 @@ function shouldDeleteCompletedOverdue_(tipe, completedYmd, todayYmd) {
   return completedYmd < todayYmd;
 }
 function cleanupCompletedOverdue_(ss, todayYmd) {
+  // KOREKSI 29 Okt 2026 (membalikkan penahanan 5HAL-TEST sebelumnya):
+  // arah yang benar dari om: overdue yang sudah diceklis HARUS HILANG di
+  // periode berikutnya (Harian: hari berikutnya, Mingguan: minggu
+  // berikutnya, Bulanan/Tambahan: bulan berikutnya). Fungsi ini
+  // dikembalikan ke logika penghapusan semula, ditambah dua jaring
+  // pengaman yang TIDAK mengubah aturan periode di atas:
+  // (1) bila Rekapan tidak punya entri untuk ID Overdue (OVD-...),
+  //     coba entri untuk Original_ID-nya (kolom I) — ini menutup kasus
+  //     Rekapan tercatat atas ID asli, bukan ID Overdue;
+  // (2) khusus Harian tanpa entri Rekapan sama sekali: baris Selesai
+  //     tetap dihapus di reset 01.00, karena reset 01.00 berarti ceklis
+  //     itu sudah terjadi sebelum hari ini (kecuali ceklis 00.00-01.00,
+  //     yang praktis tidak terjadi) — jadi "hari berikutnya" terpenuhi.
+  // Untuk Mingguan/Bulanan/Tambahan tanpa entri Rekapan, baris TIDAK
+  // dihapus (menghindari hapus terlalu dini) dan dicatat di log.
   const sh = ss.getSheetByName("Overdue");
   if (!sh || sh.getLastRow() < 2) return;
   const completionMap = getLatestCompletionYmdMap_(ss);
   const data = sh.getDataRange().getValues();
+  let examined = 0, deleted = 0, skippedNoRekapan = 0;
   for (let i = data.length - 1; i >= 1; i--) {
     const idTask = String(data[i][0] || "");
     const tipe = String(data[i][2] || "");
     const status = String(data[i][5] || "");
     if (status !== "Selesai") continue;
-    const completedYmd = completionMap[idTask] || "";
-    if (shouldDeleteCompletedOverdue_(tipe, completedYmd, todayYmd)) sh.deleteRow(i + 1);
+    examined++;
+    const originalId = String(data[i][8] || "");
+    let completedYmd = completionMap[idTask] || (originalId ? completionMap[originalId] : "") || "";
+    if (!completedYmd && tipe === "Harian") {
+      // Jaring pengaman Harian (lihat komentar di atas).
+      sh.deleteRow(i + 1);
+      deleted++;
+      continue;
+    }
+    if (!completedYmd) {
+      skippedNoRekapan++;
+      Logger.log("SIBACOT cleanup overdue: lewati (tanpa Rekapan) id=" + idTask + " tipe=" + tipe);
+      continue;
+    }
+    if (shouldDeleteCompletedOverdue_(tipe, completedYmd, todayYmd)) {
+      sh.deleteRow(i + 1);
+      deleted++;
+    }
   }
+  Logger.log("SIBACOT cleanup overdue: diperiksa=" + examined + " dihapus=" + deleted + " dilewatiTanpaRekapan=" + skippedNoRekapan + " tanggal=" + todayYmd);
 }
 // === END HOTFIX OVERDUE SELESAI ===
 
@@ -580,11 +891,116 @@ function prosesAPI(payload) {
   try {
     const action = payload.action;
     const ss = openSpreadsheet_();
-    // PATCH KEAMANAN: semua aksi kecuali login dan identitas publik WAJIB
-    // membawa sessionToken valid. Username/peran diambil dari token di server.
+    // PATCH KEAMANAN: semua aksi kecuali login, identitas publik, dan
+    // dua langkah login passkey WAJIB membawa sessionToken valid.
+    // Username/peran diambil dari token di server.
     let sessionUser = null;
-    if (action !== "login" && action !== "getPublicIdentity") {
+    if (action !== "login" && action !== "getPublicIdentity" && action !== "passkeyLoginStart" && action !== "passkeyLoginFinish") {
       sessionUser = requireSession_(ss, payload);
+    }
+
+    // --- PASSKEY v1 (TEST ONLY) ---
+    if (action === "passkeyRegisterStart") {
+      const c = pkStoreChallenge_(sessionUser.username, "register");
+      return { status: "success", challenge: c.challenge, challengeToken: c.token,
+        rpId: pkRpId_(), username: sessionUser.username,
+        userId: pkB64urlEncode_(pkStringToBytes_(sessionUser.username)) };
+    }
+
+    if (action === "passkeyRegisterFinish") {
+      const challengeB64 = pkConsumeChallenge_(payload.challengeToken || "", sessionUser.username, "register");
+      pkVerifyClientData_(payload.clientDataJSON || "", "webauthn.create", challengeB64);
+      const attObj = pkB64urlDecode_(payload.attestationObject || "");
+      const att = pkCborDecode_(attObj, 0)[0];
+      if (!att || !att.authData) throw new Error("Passkey: attestationObject tidak bisa dibaca.");
+      const rpHash = pkSha256_(pkStringToBytes_(pkRpId_()));
+      const parsed = pkParseAuthData_(att.authData, rpHash);
+      if (!parsed.credential) throw new Error("Passkey: attestation tidak membawa kredensial.");
+      const fmt = att.fmt;
+      if (fmt === "none") {
+        if (att.attStmt && Object.keys(att.attStmt).length) throw new Error("Passkey: fmt none tapi attStmt tidak kosong.");
+        // BATASAN v1 (jujur): fmt none tidak membawa tanda tangan
+        // attestation — pendaftaran mempercayai upacara WebAuthn di
+        // browser + sesi password yang sudah login (lihat header PASSKEY).
+      } else if (fmt === "packed") {
+        const stmt = att.attStmt || {};
+        if (stmt.x5c) throw new Error("Passkey v1: attestation packed dengan sertifikat (x5c) tidak didukung.");
+        if (stmt.alg !== -7 || !stmt.sig) throw new Error("Passkey: attestation packed tidak lengkap.");
+        const msg = att.authData.concat(pkSha256_(pkB64urlDecode_(payload.clientDataJSON)));
+        if (!pkVerifyEs256_(parsed.credential.x, parsed.credential.y, msg, stmt.sig)) {
+          throw new Error("Passkey: verifikasi tanda tangan attestation packed gagal.");
+        }
+      } else {
+        throw new Error("Passkey v1: format attestation '" + fmt + "' tidak didukung (hanya none/packed).");
+      }
+      if (pkFindCredential_(ss, parsed.credential.credentialId)) {
+        return { status: "error", message: "Sidik jari ini sudah terdaftar di akun ini." };
+      }
+      const shPk = ensurePasskeysSheet_(ss);
+      shPk.appendRow([sessionUser.username, parsed.credential.credentialId, parsed.credential.x,
+        parsed.credential.y, parsed.counter, new Date().getTime(), parsed.credential.aaguid]);
+      SpreadsheetApp.flush();
+      return { status: "success", message: "Sidik jari perangkat ini berhasil didaftarkan.", credentialId: parsed.credential.credentialId };
+    }
+
+    if (action === "passkeyLoginStart") {
+      const username = String(payload.username || "").trim();
+      if (!username) return { status: "error", message: "Isi NIP / ID Pengguna dulu." };
+      const creds = pkListForUser_(ss, username);
+      if (!creds.length) return { status: "error", message: "Belum ada sidik jari terdaftar untuk NIP ini. Login dengan password dulu, lalu daftarkan perangkat ini." };
+      const c = pkStoreChallenge_(username, "login");
+      return { status: "success", challenge: c.challenge, challengeToken: c.token, rpId: pkRpId_(),
+        allowCredentials: creds.map(function (cr) { return { id: cr.credentialId, type: "public-key" }; }) };
+    }
+
+    if (action === "passkeyLoginFinish") {
+      const username = String(payload.username || "").trim();
+      const credentialId = String(payload.credentialId || "");
+      const cred = pkFindCredential_(ss, credentialId);
+      if (!cred || cred.username !== username) return { status: "error", message: "Kredensial sidik jari tidak dikenali." };
+      const challengeB64 = pkConsumeChallenge_(payload.challengeToken || "", username, "login");
+      pkVerifyClientData_(payload.clientDataJSON || "", "webauthn.get", challengeB64);
+      const authData = pkB64urlDecode_(payload.authenticatorData || "");
+      const rpHash = pkSha256_(pkStringToBytes_(pkRpId_()));
+      const parsed = pkParseAuthData_(authData, rpHash);
+      const msg = authData.concat(pkSha256_(pkB64urlDecode_(payload.clientDataJSON)));
+      const sig = pkB64urlDecode_(payload.signature || "");
+      if (!pkVerifyEs256_(cred.x, cred.y, msg, sig)) {
+        return { status: "error", message: "Passkey: verifikasi tanda tangan gagal." };
+      }
+      // Anti-replay via counter: naik hanya bila authenticator
+      // menghitung (counter 0 = authenticator tanpa counter, dilewati).
+      if (parsed.counter > 0) {
+        if (parsed.counter <= cred.counter) {
+          return { status: "error", message: "Passkey: counter tidak bertambah (kemungkinan replay). Login ditolak." };
+        }
+        const shPk = ss.getSheetByName(PASSKEY_SHEET);
+        if (shPk) shPk.getRange(cred.row, 5).setValue(parsed.counter);
+      }
+      const shUsersPk = ss.getSheetByName("Users");
+      if (!shUsersPk) return { status: "error", message: "Data user tidak ditemukan." };
+      const usersPk = shUsersPk.getDataRange().getValues();
+      for (let i = 1; i < usersPk.length; i++) {
+        if (String(usersPk[i][0] || "").trim() === username) {
+          const sessionToken = createSession_(ss, usersPk[i][0], usersPk[i][2]);
+          return { status: "success", role: usersPk[i][2], nama: usersPk[i][3], username: usersPk[i][0],
+            sessionToken: sessionToken, userVerified: !!(parsed.flags & 0x04) };
+        }
+      }
+      return { status: "error", message: "NIP atau Kata Sandi salah!" };
+    }
+
+    if (action === "passkeyList") {
+      return { status: "success", passkeys: pkListForUser_(ss, sessionUser.username) };
+    }
+
+    if (action === "passkeyDelete") {
+      const credentialId = String(payload.credentialId || "");
+      const cred = pkFindCredential_(ss, credentialId);
+      if (!cred || cred.username !== sessionUser.username) return { status: "error", message: "Sidik jari tidak ditemukan di akun Anda." };
+      const shPk = ss.getSheetByName(PASSKEY_SHEET);
+      if (shPk) shPk.deleteRow(cred.row);
+      return { status: "success", message: "Sidik jari dihapus dari akun Anda." };
     }
 
     if (action === "login") {
@@ -1200,7 +1616,13 @@ function resetTugasBerulang() {
 
   // Tambahan: lewat tenggat pindah ke Overdue; selesai tampil sampai akhir bulan tenggat.
   cleanupAndMoveTambahan_(ss, todayYmd);
+  // KOREKSI 29 Okt 2026: overdue yang sudah diceklis HARUS HILANG di
+  // periode berikutnya (Harian: hari berikutnya, Mingguan: minggu
+  // berikutnya, Bulanan/Tambahan: bulan berikutnya). Pemanggilan ini
+  // dikembalikan setelah sempat dinonaktifkan atas penafsiran yang
+  // keliru pada 5HAL-TEST sebelumnya.
   cleanupCompletedOverdue_(ss, todayYmd);
+  Logger.log("SIBACOT resetTugasBerulang selesai tanggal=" + todayYmd);
   SpreadsheetApp.flush();
 }
 
