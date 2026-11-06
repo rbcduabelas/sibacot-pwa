@@ -8,5 +8,5 @@
 // setiap aksi — bukan dari kerahasiaan URL ini. Tanpa token valid, backend
 // menolak semua aksi (kecuali login dan identitas publik).
 window.SIBACOT_CONFIG = {
-  API_URL: "https://script.google.com/macros/s/AKfycbzMbVU3EwFuCEfTVxNuRpH3o4BEYb21sPzsdZfktWfZrSDzZxFtqcw9eUF4CJ2PGb8K/exec"
+  API_URL: "https://script.google.com/macros/s/AKfycbyU6jKG5MNFHMmlNigVURNHUbxjesN9VxL5dMTSvOCtO5AFG13wIOnCjCev3Wcc7_ym/exec"
 };
