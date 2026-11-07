@@ -8,6 +8,30 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="SIBACOT">
+  <!-- RONDE 4: BUNUH SERVICE WORKER (tersangka utama cache basi di HP).
+       Registrasi SW dihapus (lihat akhir file) dan file sw.js tidak lagi
+       dikirim. Skrip ini berjalan paling awal di setiap load: batalkan
+       registrasi SW lama yang masih menguasai aplikasi di HP, lalu hapus
+       semua Cache Storage agar kode baru (bukan kode lama) yang dipakai.
+       Tanpa SW, halaman selalu dimuat dari jaringan; "Add to Home Screen"
+       via menu browser tetap bisa, tapi tombol Install di aplikasi tidak
+       lagi memunculkan prompt otomatis (sudah ada toast panduannya). -->
+  <script>
+    (function () {
+      try {
+        if ("serviceWorker" in navigator) {
+          navigator.serviceWorker.getRegistrations().then(function (regs) {
+            regs.forEach(function (r) { r.unregister(); });
+          }).catch(function () {});
+        }
+        if (window.caches && caches.keys) {
+          caches.keys().then(function (keys) {
+            keys.forEach(function (k) { caches.delete(k); });
+          }).catch(function () {});
+        }
+      } catch (e) {}
+    })();
+  </script>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="icons/icon-512.png">
   <link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512.png">
@@ -197,18 +221,9 @@
       margin-top: 10px;
     }
 
-    /* RONDE 2: LOGIN + sidik jari berdampingan satu baris. LOGIN flex 1,
-       tombol sidik jari kotak berisi ikon saja (tanpa teks). Bila WebAuthn
-       tidak didukung, tombol sidik jari disembunyikan dan LOGIN kembali
-       full-width. */
-    .login-actions-row { display: flex; gap: 10px; align-items: stretch; margin-top: 10px; }
-    .login-actions-row .btn-login-custom { flex: 1; width: auto; margin-top: 0; }
-    .login-actions-row .btn-passkey-icon { flex: 0 0 56px; width: 56px; min-width: 56px; padding: 14px 0; margin-top: 0; text-align: center; line-height: 1; }
-    .login-actions-row .btn-passkey-icon svg { display: block; margin: 0 auto; }
-
-    /* PASSKEY v1 (TEST ONLY): tombol sidik jari di layar login. */
-    .btn-passkey { width: 100%; padding: 14px; background: #fff; color: var(--corp-blue); border: 2px solid var(--corp-gold); border-radius: 8px; font-size: 15px; font-weight: 800; cursor: pointer; margin-top: 4px; }
-    .btn-passkey:disabled { opacity: 0.6; cursor: not-allowed; }
+    /* RONDE 4: tombol LOGIN kembali lebar penuh (.btn-login-custom sudah
+       width: 100%). Baris berdampingan beserta tombol login alternatifnya
+       dihapus bersama fitur tersebut. */
 
     .btn-primary { background: var(--corp-blue); color: var(--surface); }
     .btn-primary:hover { background: var(--corp-blue-light); }
@@ -566,14 +581,8 @@
               <input type="password" id="inPass" placeholder="Password" onkeypress="handleEnter(event)">
             </div>
           </div>
-          <!-- RONDE 2: LOGIN + sidik jari berdampingan satu baris. Tombol
-               sidik jari hanya berisi ikon sidik jari (SVG, tanpa teks);
-               id, onclick, dan logika tampil/sembunyi tidak berubah. -->
-          <div class="login-actions-row">
-            <button type="button" id="btnLogin" class="btn-login-custom" onclick="doLogin()">LOGIN</button>
-            <button type="button" id="btnPasskeyLogin" class="btn-passkey btn-passkey-icon" onclick="loginWithPasskey()" aria-label="Masuk dengan sidik jari" title="Masuk dengan sidik jari"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 4a8 8 0 0 1 8 8c0 4-.9 7.3-2.2 9.8"/><path d="M12 4a8 8 0 0 0-8 8c0 4 .9 7.3 2.2 9.8"/><path d="M12 7.5a4.5 4.5 0 0 1 4.5 4.5c0 3.2-.6 6-1.6 8.3"/><path d="M12 7.5a4.5 4.5 0 0 0-4.5 4.5c0 3.2.6 6 1.6 8.3"/><path d="M12 11a1.5 1.5 0 0 1 1.5 1.5c0 2-.3 4-.9 5.7"/><path d="M12 11a1.5 1.5 0 0 0-1.5 1.5c0 2 .3 4 .9 5.7"/></svg></button>
-          </div>
-          <div id="passkeyLoginNote" style="font-size:11px; color:#888; margin-top:8px; text-align:center;"></div>
+
+          <button type="button" id="btnLogin" class="btn-login-custom" onclick="doLogin()">LOGIN</button>
         </div>
       </div>
     </div>
@@ -591,14 +600,7 @@
 
     <main class="container">
       <div class="welcome-bar"><span id="welcomeMsg"></span></div>
-      <!-- PASSKEY v1 (TEST ONLY): kartu pendaftaran sidik jari perangkat ini. -->
-      <div id="passkeyCard" class="card" style="display:none; margin-bottom:14px;">
-        <h3 class="card-title">🔐 Sidik Jari (Passkey) — Uji</h3>
-        <div style="font-size:13px; color:#444; margin-bottom:8px;">Login pertama tetap pakai password. Setelah itu, daftarkan perangkat ini agar login berikutnya bisa pakai sidik jari / face unlock — hanya di perangkat &amp; browser ini. Password tetap berfungsi sebagai cadangan.</div>
-        <div id="passkeyCount" style="font-size:12px; color:#666; margin-bottom:8px;">Memuat…</div>
-        <div id="passkeyList" style="font-size:13px; margin-bottom:8px;"></div>
-        <button type="button" class="btn-primary" id="btnRegisterPasskey" onclick="registerPasskey()">👆 Daftarkan sidik jari perangkat ini</button>
-      </div>
+
       <button class="fab-btn" id="fabAdd" onclick="openModal('taskModal')" style="display:none;">+</button>
 
       <div id="viewChecklist" style="display:block;">
@@ -801,11 +803,11 @@
     </div>
   </div>
 
-  <!-- RONDE 2: cache-buster agar service worker tidak menyajikan config.js
-       lama dari cache (akar gagal daftar sidik jari 7 Nov: HTML baru +
-       config lama -> backend v65 -> "Aksi tidak dikenali server.").
-       Versi dinaikkan tiap kali URL backend berubah. -->
-  <script src="config.js?v=66"></script>
+  <!-- RONDE 4: cache-buster config.js dinaikkan ke ?v=69 (backend v69).
+       Service worker sudah dimatikan total di ronde ini, jadi tidak ada
+       lagi cache yang bisa menyajikan config.js lama; query ini pertahanan
+       kedua terhadap cache HTTP/browser biasa. -->
+  <script src="config.js?v=69"></script>
   <script>
     // HOTFIX 2026-07-02 ADMIN EDIT OVERDUE
     // PATCH KEAMANAN: kunci penyimpanan lama diganti (semua user wajib login ulang
@@ -856,32 +858,63 @@
       });
     }
 
-    // ==== RONDE 3: tombol back HP (History API, konfirmasi buatan aplikasi) ====
-    // Menggantikan blok RONDE 2. Perubahan desain (permintaan pemilik 7 Nov
+
+
+    // ==== RONDE 4: tombol back HP (History API, konfirmasi buatan aplikasi) ====
+    // Menggantikan blok RONDE 3. Niat tetap sama (permintaan pemilik 7 Nov
     // 2026 — back di layar login HARUS bertanya dulu, bukan langsung keluar):
     // back dicegat di SEMUA layar tingkat atas, TERMASUK layar login.
-    // (a) trap dipersenjatai ulang SECARA SINKRON di awal listener
-    // popstate, sebelum handler async apa pun berjalan — kecuali saat
-    // flag sibacotExiting aktif (pemilik sudah menekan Oke untuk keluar:
-    // biarkan navigasi back berjalan, jangan re-arm, jangan konfirmasi
-    // lagi); (b) checkSession memastikan trap hidup setiap kali tampilan
-    // berubah (aplikasi maupun login), termasuk setelah doLogout;
-    // (c) di layar checklist DAN layar login, back menampilkan
-    // customConfirm "Yakin ingin keluar?" (BUKAN confirm() native).
-    // Bila Oke: set sibacotExiting = true, toast "Tekan kembali sekali
-    // lagi untuk keluar", lalu history.back() sekali — back berikutnya
-    // tidak dicegat lagi. Bila Batal: tetap di tempat, trap tetap hidup.
-    // Back menelusuri layar dalam aplikasi dulu (modal → tutup; submenu
-    // admin → dashboard; dashboard admin → checklist).
-    let sibacotBackBusy = false;
+    // Urutan layar dalam aplikasi: modal -> tutup modal; submenu admin ->
+    // dashboard admin; dashboard admin -> checklist; checklist & login ->
+    // customConfirm "Yakin ingin keluar?". Bila Oke: toast "Tekan kembali
+    // sekali lagi untuk keluar", lalu back sekali lagi keluar. Bila Batal:
+    // tetap di tempat, trap tetap hidup.
+    //
+    // Perbaikan RONDE 4 atas kelemahan RONDE 3 (temuan dari audit kode —
+    // penyebab pasti gagal di HP belum diketahui, karena HP pemilik
+    // kemungkinan masih menjalankan kode lama dari cache service worker,
+    // yang dimatikan total di ronde ini):
+    // (1) sibacotTrapLive kini JUJUR: di-nol-kan setiap kali satu entri
+    //     history dikonsumsi (awal listener popstate), baru diset true
+    //     saat re-arm berhasil. Di RONDE 3 flag ini tidak pernah false
+    //     lagi setelah seed pertama, sehingga perbaikan darurat di
+    //     checkSession ("re-arm bila trap mati") tidak pernah bisa jalan.
+    // (2) Back yang ditekan dua kali cepat saat konfirmasi masih terbuka
+    //     tidak lagi menjalankan dua handler bersamaan (RONDE 3: dua
+    //     customConfirm bisa tumpang tindih dan saling membatalkan).
+    //     Handler kedua hanya membatalkan konfirmasi yang sedang tampil.
+    // (3) Flag sibacotExiting (sudah Oke keluar) kini punya masa tenggang
+    //     5 detik: bila pemilik ternyata tetap di aplikasi (tidak menekan
+    //     back kedua), trap dipasang lagi otomatis. Di RONDE 3 flag ini
+    //     hidup selamanya — pemilik yang menekan Oke lalu berubah pikiran
+    //     dan lanjut memakai aplikasi kehilangan trap untuk sisa sesi.
+    //     doLogout juga me-reset flag ini.
+    // (4) Jaring pengaman: setiap kali halaman kembali terlihat
+    //     (pageshow/visibilitychange) dan trap mati, trap dipasang lagi;
+    //     plus pemeriksaan berkala 5 detik yang hanya memasang bila trap
+    //     mati (tidak pernah menambah entri bila trap sudah hidup).
+    // (5) sibacotBackBusy dihapus — tidak pernah dibaca siapa pun kecuali
+    //     sibacotPushNav, dan logika barunya memakai sibacotHandlingBack
+    //     yang memang dijaga di handler.
     let sibacotTrapLive = false;
     let sibacotExiting = false;
+    let sibacotHandlingBack = false;
+    let sibacotExitTimer = null;
     function sibacotRearmTrap() {
       if (sibacotExiting) return; // sedang keluar: jangan pasang jebakan baru
-      try { history.pushState({ sibacot: 1 }, ""); sibacotTrapLive = true; } catch (e) {}
+      try { history.pushState({ sibacot: 1 }, ""); sibacotTrapLive = true; } catch (e) { sibacotTrapLive = false; }
     }
     function sibacotPushNav() {
-      if (sibacotBackBusy) return;
+      // Dipanggil setiap kali aplikasi pindah layar ke dalam (buka modal,
+      // masuk submenu admin, masuk dashboard): satu entri history per
+      // satu langkah masuk, supaya satu back = satu langkah mundur.
+      sibacotRearmTrap();
+    }
+    function sibacotResetExit() {
+      // Pemilik menekan Oke keluar tapi ternyata tetap di aplikasi:
+      // hidupkan lagi trap-nya. Dipanggil sekali 5 detik setelah Oke;
+      // bila pemilik sudah pergi (halaman ditinggal), timer tidak jalan.
+      sibacotExiting = false;
       sibacotRearmTrap();
     }
     function sibacotCurrentView() {
@@ -897,11 +930,20 @@
     }
     async function sibacotHandleBack() {
       if (sibacotExiting) return; // sudah Oke keluar: biarkan back berjalan
-      const view = sibacotCurrentView();
-      sibacotBackBusy = true;
+      if (sibacotHandlingBack) {
+        // Back kedua saat handler pertama masih berjalan (biasanya saat
+        // konfirmasi "Yakin ingin keluar?" masih terbuka): batalkan saja
+        // konfirmasi itu, jangan buka konfirmasi kedua.
+        if (sibacotCurrentView() === "confirm") {
+          const batal = document.getElementById("confirmBtnBatal");
+          if (batal) batal.click();
+        }
+        return;
+      }
+      sibacotHandlingBack = true;
       try {
+        const view = sibacotCurrentView();
         if (view === "confirm") {
-          // Batalkan konfirmasi yang sedang tampil (resolve promise = false).
           const batal = document.getElementById("confirmBtnBatal");
           if (batal) batal.click(); else document.getElementById("confirmModal").style.display = "none";
         } else if (view === "modal") {
@@ -916,20 +958,24 @@
           if (ok) {
             sibacotExiting = true;
             showToast("Tekan kembali sekali lagi untuk keluar");
+            // Bila pemilik tetap di sini (tidak menekan back kedua),
+            // hidupkan lagi trap setelah 5 detik (lihat sibacotResetExit).
+            if (sibacotExitTimer) clearTimeout(sibacotExitTimer);
+            sibacotExitTimer = setTimeout(sibacotResetExit, 5000);
             history.back();
           }
           // Batal: tetap di tempat; trap sudah dipersenjatai ulang
           // secara sinkron di listener popstate sebelum handler jalan.
         }
       } finally {
-        sibacotBackBusy = false;
+        sibacotHandlingBack = false;
       }
-      // RONDE 3: TIDAK ada push lagi di sini — trap dipersenjatai ulang
-      // secara sinkron di listener popstate sebelum handler jalan.
     }
     window.addEventListener("popstate", () => {
-      // RONDE 3: bila pemilik sudah menekan Oke untuk keluar, jangan
-      // re-arm dan jangan panggil handler — biarkan navigasi back jalan.
+      // Satu entri history baru saja dikonsumsi oleh back ini.
+      sibacotTrapLive = false;
+      // Bila pemilik sudah menekan Oke untuk keluar, jangan re-arm dan
+      // jangan panggil handler — biarkan navigasi back jalan.
       if (sibacotExiting) return;
       // Persenjatai ulang trap DULU, sinkron, sebelum sibacotHandleBack
       // berjalan — termasuk saat modal konfirmasi sedang terbuka dan
@@ -937,9 +983,15 @@
       sibacotRearmTrap();
       sibacotHandleBack();
     });
+    // Jaring pengaman: bila trap mati karena alasan apa pun (mis. pushState
+    // pernah gagal), pasang lagi saat halaman kembali terlihat. Pemeriksaan
+    // berkala hanya memasang bila trap mati — tidak menambah entri history
+    // bila trap sudah hidup.
+    window.addEventListener("pageshow", () => { if (!sibacotTrapLive && !sibacotExiting) sibacotRearmTrap(); });
+    document.addEventListener("visibilitychange", () => { if (!document.hidden && !sibacotTrapLive && !sibacotExiting) sibacotRearmTrap(); });
+    setInterval(() => { if (!sibacotTrapLive && !sibacotExiting) sibacotRearmTrap(); }, 5000);
     sibacotRearmTrap(); // entri seed saat load
-    // ==== AKHIR RONDE 3 back HP ====
-
+    // ==== AKHIR RONDE 4 back HP ====
     const TIMEOUT_MENIT = 3;
     const TIMEOUT_MS = TIMEOUT_MENIT * 60 * 1000;
     const WARNING_MS = (TIMEOUT_MENIT - 1) * 60 * 1000;
@@ -1120,16 +1172,15 @@
 
     window.onerror = function(msg) { showToast("Sistem Gagal: " + msg); };
 
-    // RONDE 2: dedupe toast — pesan yang SAMA PERSIS dalam 1,5 detik
-    // terakhir diabaikan. Sebelum ini dua pemanggilan gagal yang sama
-    // (mis. pkRefreshPasskeyList saat load + percobaan daftar sidik jari
-    // melawan backend lama) menampilkan toast identik dua kali.
+    // RONDE 4: dedupe toast — pesan yang SAMA PERSIS dalam 2 detik
+    // terakhir diabaikan (RONDE 2 memakai 1,5 detik; dua kegagalan
+    // berurutan yang terpisah >1,5 detik masih tampil dua kali).
     // Timer sembunyi juga disimpan agar toast baru tidak ikut hilang
     // oleh timer toast sebelumnya.
     let lastToastMsg = "", lastToastTime = 0, toastHideTimer = null;
     function showToast(msg) {
       const now = Date.now();
-      if (msg === lastToastMsg && now - lastToastTime < 1500) return;
+      if (msg === lastToastMsg && now - lastToastTime < 2000) return;
       lastToastMsg = msg;
       lastToastTime = now;
       const t = document.getElementById("toast");
@@ -1149,8 +1200,15 @@
           // kecuali pemanggil sudah mengisinya secara eksplisit (mis. target
           // deleteUser). Backend mengabaikan username client untuk otorisasi.
         }
-        const timeoutId = setTimeout(() => { showToast("Koneksi Server Timeout. Pastikan Otorisasi di Apps Script disetujui."); reject(new Error("Timeout")); }, 30000);
+        // RONDE 4: bendera settled — jawaban yang datang SETELAH timeout
+        // 30 detik diabaikan. Sebelum ini jawaban telat masih menjalankan
+        // handleResult dan bisa me-toast error kedua untuk satu aksi yang
+        // sama (salah satu sumber toast ganda).
+        let settled = false;
+        const timeoutId = setTimeout(() => { if (settled) return; settled = true; showToast("Koneksi Server Timeout. Pastikan Otorisasi di Apps Script disetujui."); reject(new Error("Timeout")); }, 30000);
         const handleResult = (res) => {
+          if (settled) return;
+          settled = true;
           clearTimeout(timeoutId);
           // PERBAIKAN PASCA-TEST_CHECKLIST (temuan 2): backend lama membuang
           // kode SESSION_EXPIRED di catch prosesAPI, sehingga respons sampai
@@ -1180,16 +1238,16 @@
         if (typeof google !== 'undefined' && google.script && google.script.run) {
           google.script.run
             .withSuccessHandler(handleResult)
-            .withFailureHandler(error => { clearTimeout(timeoutId); showToast("Server Gagal: " + error.message); reject(error); })
+            .withFailureHandler(error => { if (settled) return; settled = true; clearTimeout(timeoutId); showToast("Server Gagal: " + error.message); reject(error); })
             .prosesAPI(payload);
           return;
         }
         const apiUrl = (window.SIBACOT_CONFIG && window.SIBACOT_CONFIG.API_URL) || "";
-        if (!apiUrl || apiUrl.includes("ISI_URL_WEB_APP_BARU_SETELAH_REDEPLOY")) { clearTimeout(timeoutId); showToast("API GAS belum diatur. Isi URL Web App baru di config.js setelah redeploy."); reject(new Error("API_URL kosong")); return; }
+        if (!apiUrl || apiUrl.includes("ISI_URL_WEB_APP_BARU_SETELAH_REDEPLOY")) { settled = true; clearTimeout(timeoutId); showToast("API GAS belum diatur. Isi URL Web App baru di config.js setelah redeploy."); reject(new Error("API_URL kosong")); return; }
         fetch(apiUrl, { method:"POST", redirect:"follow", headers:{"Content-Type":"text/plain;charset=utf-8"}, body:JSON.stringify(payload) })
           .then(r => r.text())
           .then(txt => { let res = JSON.parse(txt); handleResult(res); })
-          .catch(error => { clearTimeout(timeoutId); showToast("API GitHub/GAS gagal: " + error.message); reject(error); });
+          .catch(error => { if (settled) return; settled = true; clearTimeout(timeoutId); showToast("API GitHub/GAS gagal: " + error.message); reject(error); });
       });
     }
 
@@ -1229,8 +1287,6 @@
         // (mis. back di login, lalu login, lalu back di checklist harus
         // tetap memunculkan konfirmasi).
         if (!sibacotTrapLive) sibacotRearmTrap();
-        pkUpdatePasskeyUI();
-        pkRefreshPasskeyList();
         loadData().finally(() => { const lo = document.getElementById('loadingOverlay'); if (lo) lo.style.display = 'none'; });
         tampilkanBannerNotifJikaPerlu();
         const headerLogo = document.getElementById("headerAppLogo");
@@ -1243,7 +1299,6 @@
         document.getElementById("notifBadgeBtn").style.display = "none";
         stopAutoLogout();
         if (notifCheckInterval) { clearInterval(notifCheckInterval); notifCheckInterval = null; }
-        pkUpdatePasskeyUI();
         // RONDE 3: pastikan trap back hidup juga di layar login (mis.
         // setelah doLogout biasa) — back di login tetap menampilkan
         // konfirmasi "Yakin ingin keluar?", bukan langsung keluar.
@@ -1276,8 +1331,8 @@
       if (e.key === "Enter" || e.keyCode === 13) { e.preventDefault(); doLogin(); }
     }
 
-    // Dipakai login password DAN login passkey: simpan sesi lalu masuk.
-    function pkApplyLoginSuccess(data) {
+    // Simpan sesi login password lalu masuk ke aplikasi.
+    function applyLoginSuccess(data) {
       localStorage.setItem("sibacot_user", JSON.stringify({ username: data.username, nama: data.nama, role: data.role }));
       localStorage.setItem("sibacot_session_token", data.sessionToken);
       globalSessionToken = data.sessionToken;
@@ -1292,140 +1347,19 @@
       btn.disabled = true;
       try {
         const data = await callAPI({ action: "login", username: uInput, password: pInput });
-        if (data.status === "success" && data.sessionToken) pkApplyLoginSuccess(data);
+        if (data.status === "success" && data.sessionToken) applyLoginSuccess(data);
         // 5HAL-TEST: toast error login HANYA dari callAPI (handleResult).
         // Toast kedua di sini dulu membuat satu gagal login tampil 2x.
       } catch (err) {}
       btn.disabled = false;
     }
 
-    // --- PASSKEY v1 (TEST ONLY) ---
-    // base64url <-> Uint8Array (WebAuthn memakai base64url tanpa padding).
-    function pkB64urlEncodeBuf(buf) {
-      const bytes = new Uint8Array(buf);
-      let bin = "";
-      bytes.forEach(b => { bin += String.fromCharCode(b); });
-      return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-    }
-    function pkB64urlDecodeBuf(s) {
-      s = String(s || "").replace(/-/g, "+").replace(/_/g, "/");
-      while (s.length % 4) s += "=";
-      const bin = atob(s);
-      const bytes = new Uint8Array(bin.length);
-      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-      return bytes;
-    }
-    function pkWebAuthnSupported() {
-      // WebAuthn butuh secure context (https / localhost). Di http biasa
-      // PublicKeyCredential tidak ada — tombol disembunyikan, bukan error.
-      return !!(window.PublicKeyCredential && window.isSecureContext);
-    }
-    function pkUpdatePasskeyUI() {
-      const supported = pkWebAuthnSupported();
-      const btn = document.getElementById("btnPasskeyLogin");
-      if (btn) btn.style.display = supported ? "block" : "none";
-      const note = document.getElementById("passkeyLoginNote");
-      if (note) note.innerText = supported
-        ? "Sidik jari hanya berfungsi di perangkat & browser tempat sidik jari didaftarkan. Password tetap bisa dipakai."
-        : "Perangkat/browser ini tidak mendukung sidik jari (WebAuthn), jadi tombol sidik jari disembunyikan. Login password tetap berfungsi.";
-      const card = document.getElementById("passkeyCard");
-      if (card) card.style.display = globalUser ? "block" : "none";
-    }
-    async function pkRefreshPasskeyList() {
-      const listEl = document.getElementById("passkeyList");
-      const countEl = document.getElementById("passkeyCount");
-      if (!listEl) return;
-      try {
-        const res = await callAPI({ action: "passkeyList" });
-        if (!res || res.status !== "success") {
-          if (countEl) countEl.innerText = "Belum ada perangkat terdaftar.";
-          listEl.innerHTML = "";
-          return;
-        }
-        const items = res.passkeys || [];
-        if (countEl) countEl.innerText = items.length ? items.length + " perangkat terdaftar." : "Belum ada perangkat terdaftar.";
-        listEl.innerHTML = items.map(it => {
-          const tgl = it.created ? new Date(it.created).toLocaleDateString("id-ID") : "-";
-          return '<div style="display:flex; justify-content:space-between; gap:8px; padding:6px 0; border-bottom:1px solid #eee;">'
-            + '<span>🔐 ' + escapeHtml(String(it.credentialId).substring(0, 12)) + '… — ' + tgl + '</span>'
-            + '<button type="button" class="btn-danger" style="padding:4px 10px; font-size:12px;" onclick="pkDeletePasskey(\'' + it.credentialId + '\')">Hapus</button></div>';
-        }).join("");
-      } catch (e) { listEl.innerHTML = "<div>Tidak bisa memuat daftar sidik jari.</div>"; }
-    }
-    async function pkDeletePasskey(credentialId) {
-      const ok = await customConfirm("Hapus sidik jari ini dari akun Anda?", "🗑️");
-      if (!ok) return;
-      try {
-        const res = await callAPI({ action: "passkeyDelete", credentialId: credentialId });
-        if (res && res.status === "success") { showToast("Sidik jari dihapus."); pkRefreshPasskeyList(); }
-      } catch (e) { /* callAPI sudah men-toast error */ }
-    }
-    async function registerPasskey() {
-      if (!pkWebAuthnSupported()) { showToast("Perangkat/browser ini tidak mendukung sidik jari (WebAuthn)."); return; }
-      const btn = document.getElementById("btnRegisterPasskey");
-      if (btn) btn.disabled = true;
-      try {
-        const start = await callAPI({ action: "passkeyRegisterStart" });
-        if (!start || start.status !== "success") return; // error sudah di-toast callAPI
-        const cred = await navigator.credentials.create({ publicKey: {
-          rp: { name: "SIBACOT", id: start.rpId },
-          user: { id: pkB64urlDecodeBuf(start.userId), name: start.username, displayName: start.username },
-          challenge: pkB64urlDecodeBuf(start.challenge),
-          pubKeyCredParams: [{ type: "public-key", alg: -7 }], // ES256 saja (v1)
-          authenticatorSelection: { authenticatorAttachment: "platform", userVerification: "preferred", residentKey: "preferred", requireResidentKey: false },
-          timeout: 60000,
-          attestation: "none"
-        }});
-        if (!cred) { showToast("Pendaftaran sidik jari dibatalkan."); return; }
-        const fin = await callAPI({ action: "passkeyRegisterFinish",
-          challengeToken: start.challengeToken,
-          attestationObject: pkB64urlEncodeBuf(cred.response.attestationObject),
-          clientDataJSON: pkB64urlEncodeBuf(cred.response.clientDataJSON),
-          transports: (cred.response.getTransports ? cred.response.getTransports() : []) });
-        if (fin && fin.status === "success") { showToast(fin.message || "Sidik jari berhasil didaftarkan."); pkRefreshPasskeyList(); }
-      } catch (err) {
-        // RONDE 3: hanya error dari navigator WebAuthn yang di-toast di
-        // sini (DOMException: NotAllowedError saat batal/ditolak dsb).
-        // Error dari callAPI (Error/TypeError/SyntaxError jaringan/JSON)
-        // sudah di-toast callAPI — men-toast-nya lagi di sini membuat
-        // satu kegagalan tampil 2x.
-        if (err instanceof DOMException) showToast("Sidik jari gagal: " + err.name);
-      } finally { if (btn) btn.disabled = false; }
-    }
-    async function loginWithPasskey() {
-      if (!pkWebAuthnSupported()) { showToast("Perangkat/browser ini tidak mendukung sidik jari (WebAuthn)."); return; }
-      const uInput = document.getElementById("inUser").value.trim();
-      if (!uInput) { showToast("Isi NIP / ID Pengguna dulu, lalu ketuk Masuk dengan sidik jari."); return; }
-      const btn = document.getElementById("btnPasskeyLogin");
-      if (btn) btn.disabled = true;
-      try {
-        const start = await callAPI({ action: "passkeyLoginStart", username: uInput });
-        if (!start || start.status !== "success") return; // error sudah di-toast callAPI
-        const assertion = await navigator.credentials.get({ publicKey: {
-          rpId: start.rpId,
-          challenge: pkB64urlDecodeBuf(start.challenge),
-          allowCredentials: (start.allowCredentials || []).map(c => ({ type: "public-key", id: pkB64urlDecodeBuf(c.id) })),
-          userVerification: "preferred",
-          timeout: 60000
-        }});
-        if (!assertion) { showToast("Login sidik jari dibatalkan."); return; }
-        const fin = await callAPI({ action: "passkeyLoginFinish",
-          username: uInput, challengeToken: start.challengeToken,
-          credentialId: pkB64urlEncodeBuf(assertion.rawId),
-          authenticatorData: pkB64urlEncodeBuf(assertion.response.authenticatorData),
-          clientDataJSON: pkB64urlEncodeBuf(assertion.response.clientDataJSON),
-          signature: pkB64urlEncodeBuf(assertion.response.signature),
-          userHandle: assertion.response.userHandle ? pkB64urlEncodeBuf(assertion.response.userHandle) : "" });
-        if (fin && fin.status === "success" && fin.sessionToken) pkApplyLoginSuccess(fin);
-      } catch (err) {
-        // RONDE 3: sama seperti registerPasskey — hanya DOMException
-        // navigator yang di-toast; error callAPI sudah di-toast callAPI.
-        if (err instanceof DOMException) showToast("Login sidik jari gagal: " + err.name);
-      } finally { if (btn) btn.disabled = false; }
-    }
-
     function doLogout() {
       stopAutoLogout();
+      // RONDE 4: pemilik kembali ke layar login — trap back harus hidup
+      // lagi (flag keluar dari sesi sebelumnya jangan terbawa).
+      sibacotExiting = false;
+      if (sibacotExitTimer) { clearTimeout(sibacotExitTimer); sibacotExitTimer = null; }
       globalUser = null;
       globalSessionToken = null;
       notifTaskSudahDikirim.clear();
@@ -1845,8 +1779,14 @@
     async function updateStatus(cb, idTask) {
       const tr = cb.closest('tr');
       cb.checked ? tr.classList.add('selesai') : tr.classList.remove('selesai');
-      await callAPI({ action: "updateStatus", ID_Task: idTask, Status: cb.checked ? "Selesai" : "Belum" });
-      loadData();
+      // RONDE 4: callAPI yang gagal me-reject — tanpa try/catch di sini
+      // rejection-nya tidak tertangani. Error sudah di-toast sekali oleh
+      // callAPI; jangan toast lagi. loadData hanya bila simpan berhasil
+      // (bila simpan gagal, loadData ikut gagal dan akan me-toast kedua).
+      try {
+        await callAPI({ action: "updateStatus", ID_Task: idTask, Status: cb.checked ? "Selesai" : "Belum" });
+        loadData();
+      } catch (e) { /* callAPI sudah men-toast error */ }
     }
 
     function handleTipeChange() {
@@ -2082,7 +2022,6 @@
       if (btn) btn.style.display = 'none'; if (choice && choice.outcome === 'accepted') showToast('Aplikasi berhasil dipasang.');
     }
     window.addEventListener('appinstalled', () => { const btn = document.getElementById('installAppBtn'); if (btn) btn.style.display = 'none'; deferredInstallPrompt = null; });
-    if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(err => console.warn('Service worker gagal:', err)));
 
   </script>
 </body>
