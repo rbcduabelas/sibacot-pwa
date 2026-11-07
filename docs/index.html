@@ -878,27 +878,30 @@
 
 
 
-    // ==== RONDE 5: tombol back HP — keluar 1 langkah + jembatan Android ====
-    // Menggantikan blok RONDE 4 (7 Nov 2026). Alasan: uji HP ronde 4
-    // (7 Nov 15:54, 2 video) menunjukkan alur keluar 2 langkah terasa
-    // dobel — dialog "Yakin ingin keluar?" LALU toast "Tekan kembali
-    // sekali lagi untuk keluar" + tekan back ke-2 — dan di tab browser
-    // keluar terakhir hanya mundur ke halaman sebelumnya (Google), karena
-    // halaman web tidak boleh menutup tab-nya sendiri. Maka:
-    //  - back di layar tingkat atas (checklist/login) -> customConfirm
-    //    "Yakin ingin keluar?" -> Oke = LANGSUNG keluar, 1 langkah, tanpa
-    //    toast kedua dan tanpa tekan back ke-2. Batal = tetap di tempat,
-    //    trap tetap hidup.
-    //  - "Keluar" di web = doLogout() -> kembali ke layar login (bukan
-    //    history.back() ke halaman sebelumnya).
-    //  - "Keluar" di dalam APK WebView = bridge Android.exitApp() ->
-    //    aplikasi menutup (lihat sibacotExitApp; APK di
-    //    workspace/sibacot-security/apk/). Di browser biasa (tanpa objek
-    //    Android) perilaku tetap doLogout seperti di atas.
-    //  - RONDE 5: TIDAK ADA toast di jalur keluar. Satu back -> satu
-    //    dialog -> Oke -> keluar, tanpa showToast apa pun di antaranya
-    //    (toast "Tekan kembali sekali lagi" dihapus; doLogout dan
-    //    handler popstate juga tidak me-toast — diaudit 7 Nov 2026).
+    // ==== RONDE 7: "keluar" = logout ke halaman login (7 Nov 2026) ====
+    // Menggantikan arti "keluar" RONDE 5. Alasan: uji HP ronde 6
+    // (7 Nov 21:39, video) — konfirmasi keluar -> Ya di APK MALAH
+    // MENUTUP aplikasi, padahal pemilik mau kembali ke HALAMAN LOGIN;
+    // double-tap logo Mandiri juga begitu. Dan karena exitApp menutup
+    // aplikasi TANPA menghapus sesi, dibuka lagi langsung ter-login
+    // otomatis. Maka mulai ronde 7:
+    //  - "Keluar" DI MANA-MANA (web DAN APK) = doLogout() -> layar login.
+    //    Sesi localStorage dihapus, jadi buka lagi tetap di login.
+    //  - Back di layar DALAM aplikasi (checklist PIC, dasbor admin) ->
+    //    customConfirm "Yakin ingin keluar?" -> Oke = doLogout(), 1
+    //    langkah, TANPA toast (aturan ronde 5 tetap). Batal = tetap.
+    //  - Back di LAYAR LOGIN (sudah logout, tidak ada sesi) -> tanya
+    //    keluar juga, tapi Oke = TUTUP aplikasi di APK (bridge
+    //    Android.exitApp) / history.back() di web (tinggalkan situs).
+    //    Inilah SATU-SATUNYA jalur yang masih memanggil sibacotExitApp.
+    //  - Menutup aplikasi lewat tombol Home / swipe-away TANPA konfirmasi
+    //    keluar tetap menyimpan sesi (buka lagi = langsung masuk) — itu
+    //    perilaku "ingat saya" yang normal, BUKAN bug; yang diperbaiki
+    //    ronde 7 adalah keluar VIA KONFIRMASI yang kini benar-benar
+    //    logout (lihat CATATAN-RONDE7.md).
+    //  - Double-tap logo Mandiri -> konfirmasi -> Oke = doLogout()
+    //    (bukan lagi sibacotExitApp). Deteksi double-tap 400 ms tidak
+    //    diubah.
     // Urutan layar (RONDE 6, aturan pemilik 7 Nov 21:09): modal ->
     // tutup modal; submenu admin -> dashboard admin; checklist ADMIN
     // -> dashboard admin; dashboard admin + checklist PIC + login ->
@@ -910,6 +913,12 @@
     // (sibacotTrapLive di-nol-kan di awal popstate), handler ganda saat
     // konfirmasi terbuka hanya membatalkan konfirmasi, dan jaring
     // pengaman pageshow/visibilitychange/interval 5 detik.
+    // RONDE 7 menambahkan flag sibacotLeaving: sekali jalan, supaya
+    // popstate akibat history.back() dari keluar-di-login ditelan tanpa
+    // re-arm dan tanpa tanya lagi (kalau tidak, back di login akan
+    // terjebak tanya-keluar berulang karena entri seed menumpuk).
+    // Flag dibersihkan di checkSession (login ulang) — bukan di popstate
+    // — supaya back berikutnya juga berjalan sunyi sampai keluar situs.
     let sibacotTrapLive = false;
     let sibacotHandlingBack = false;
     // RONDE 6: true hanya bila checklist sedang dibuka DARI dasbor admin
@@ -917,6 +926,12 @@
     // masuk checklist langsung dari login. Dipakai handleBack supaya
     // back admin kembali ke dasbor, sementara back PIC tanya keluar.
     let sibacotAdminInChecklist = false;
+    // RONDE 7: true sejak sibacotExitApp jalur web (history.back) sampai
+    // checkSession berikutnya (login ulang). Selama flag hidup, popstate
+    // ditelan tanpa re-arm/tanya, dan jaring pengaman tidak memasang
+    // trap baru — supaya back benar-benar berjalan keluar dari situs.
+    // Jalur APK (bridge) TIDAK memasang flag: aplikasi langsung menutup.
+    let sibacotLeaving = false;
     function sibacotRearmTrap() {
       try { history.pushState({ sibacot: 1 }, ""); sibacotTrapLive = true; } catch (e) { sibacotTrapLive = false; }
     }
@@ -927,13 +942,23 @@
       sibacotRearmTrap();
     }
     function sibacotExitApp() {
-      // RONDE 5: satu pintu keluar untuk back + ketuk-dua-kali logo.
-      // Di dalam APK WebView, bridge Android menutup aplikasi; di browser
-      // biasa (tanpa window.Android) keluar = logout ke layar login.
+      // RONDE 7: pintu keluar APLIKASI — HANYA dari layar login (tidak ada
+      // sesi untuk di-logout; lihat cabang "login" di sibacotHandleBack).
+      // JANGAN panggil dari layar dalam aplikasi atau dari logo — di sana
+      // keluar = doLogout() ke layar login.
+      // Di APK WebView, bridge Android menutup aplikasi; di browser biasa
+      // (tanpa window.Android) mundur satu langkah history (tinggalkan
+      // situs). Popstate akibat history.back() ini ditelan oleh flag
+      // sibacotLeaving di listener popstate (tanpa re-arm, tanpa tanya).
       if (window.Android && typeof window.Android.exitApp === "function") {
-        try { window.Android.exitApp(); return; } catch (e) { /* jatuh ke doLogout */ }
+        try { window.Android.exitApp(); return; } catch (e) { /* jatuh ke history.back */ }
       }
-      doLogout();
+      // RONDE 7: flag HANYA dipasang di jalur web (tanpa bridge). Di jalur
+      // APK aplikasi langsung menutup, jadi flag tidak pernah dipakai dan
+      // tidak boleh tertinggal hidup (kalau tidak, back berikutnya di
+      // layar login ikut tertelan tanpa tanya — temuan harness ronde 7).
+      sibacotLeaving = true; // telan popstate dari history.back() berikut
+      history.back();
     }
     function sibacotCurrentView() {
       const disp = (id) => { const el = document.getElementById(id); return el ? el.style.display : ""; };
@@ -973,10 +998,20 @@
           // kembali ke dasbor, BUKAN tanya keluar. PIC tidak pernah
           // memenuhi syarat ini (flag hanya disetel openAdminMenu).
           showAdminDasbor();
-        } else { // adminDasbor, checklist PIC, ATAU login = layar tingkat
-          // atas: tanya dulu (RONDE 6: dasbor admin juga tanya keluar).
+        } else if (view === "login") {
+          // RONDE 7: layar login — tidak ada sesi untuk di-logout.
+          // Oke = tutup aplikasi (APK) / tinggalkan situs (web).
+          // Ini SATU-SATUNYA jalur yang memanggil sibacotExitApp.
           const ok = await customConfirm("Yakin ingin keluar?", "🚪");
-          if (ok) sibacotExitApp(); // RONDE 5: langsung keluar, 1 langkah
+          if (ok) sibacotExitApp(); // RONDE 7: APK tutup aplikasi, web history.back()
+          // Batal: tetap di login; trap sudah dipersenjatai ulang
+          // secara sinkron di listener popstate sebelum handler jalan.
+        } else { // adminDasbor ATAU checklist PIC = layar dalam aplikasi:
+          // tanya dulu (RONDE 6: dasbor admin juga tanya keluar).
+          // RONDE 7: Oke = LOGOUT ke layar login (doLogout), di web DAN
+          // di APK — BUKAN tutup aplikasi. Tanpa toast di jalur keluar.
+          const ok = await customConfirm("Yakin ingin keluar?", "🚪");
+          if (ok) doLogout(); // RONDE 7: keluar = logout, 1 langkah
           // Batal: tetap di tempat; trap sudah dipersenjatai ulang
           // secara sinkron di listener popstate sebelum handler jalan.
         }
@@ -987,6 +1022,13 @@
     window.addEventListener("popstate", () => {
       // Satu entri history baru saja dikonsumsi oleh back ini.
       sibacotTrapLive = false;
+      // RONDE 7: popstate ini akibat history.back() dari keluar-di-login
+      // (flag sibacotLeaving) — telan tanpa re-arm dan tanpa tanya lagi.
+      // Flag TIDAK dibersihkan di sini (sengaja): back berikutnya juga
+      // harus berjalan sunyi sampai keluar dari situs, karena entri seed
+      // menumpuk di bawah pointer. Flag dibersihkan di checkSession
+      // (login ulang masuk aplikasi / tampil login sesudah logout).
+      if (sibacotLeaving) return;
       // Persenjatai ulang trap DULU, sinkron, sebelum sibacotHandleBack
       // berjalan — termasuk saat modal konfirmasi sedang terbuka dan
       // termasuk di layar login, sehingga back berikutnya tetap dicegat.
@@ -996,12 +1038,14 @@
     // Jaring pengaman: bila trap mati karena alasan apa pun (mis. pushState
     // pernah gagal), pasang lagi saat halaman kembali terlihat. Pemeriksaan
     // berkala hanya memasang bila trap mati — tidak menambah entri history
-    // bila trap sudah hidup.
-    window.addEventListener("pageshow", () => { if (!sibacotTrapLive) sibacotRearmTrap(); });
-    document.addEventListener("visibilitychange", () => { if (!document.hidden && !sibacotTrapLive) sibacotRearmTrap(); });
-    setInterval(() => { if (!sibacotTrapLive) sibacotRearmTrap(); }, 5000);
+    // bila trap sudah hidup. RONDE 7: jangan pasang selama sibacotLeaving
+    // (sedang berjalan keluar dari situs) — kalau tidak, trap hidup lagi
+    // dan back berikutnya malah tanya keluar berulang.
+    window.addEventListener("pageshow", () => { if (!sibacotTrapLive && !sibacotLeaving) sibacotRearmTrap(); });
+    document.addEventListener("visibilitychange", () => { if (!document.hidden && !sibacotTrapLive && !sibacotLeaving) sibacotRearmTrap(); });
+    setInterval(() => { if (!sibacotTrapLive && !sibacotLeaving) sibacotRearmTrap(); }, 5000);
     sibacotRearmTrap(); // entri seed saat load
-    // ==== AKHIR RONDE 5 back HP ====
+    // ==== AKHIR RONDE 7 back HP ====
     const TIMEOUT_MENIT = 3;
     const TIMEOUT_MS = TIMEOUT_MENIT * 60 * 1000;
     const WARNING_MS = (TIMEOUT_MENIT - 1) * 60 * 1000;
@@ -1271,6 +1315,9 @@
     document.addEventListener("DOMContentLoaded", checkSession);
 
     function checkSession() {
+      sibacotLeaving = false; // RONDE 7: keluar-di-login selesai / batal
+      // — back berikutnya dicegat normal lagi (trap dipasang ulang di
+      // cabang aplikasi/login di bawah bila perlu).
       sibacotAdminInChecklist = false; // RONDE 6: status checklist-admin
       // dihitung ulang dari jalur masuk (dasbor admin vs langsung dari
       // login) — jangan sampai bocor antar sesi/peran.
@@ -1327,7 +1374,7 @@
       else if (logoTapCount >= 2) {
         clearTimeout(logoTapTimer);
         logoTapCount = 0;
-        customConfirm('Yakin ingin keluar dari aplikasi?', '🚪').then(ok => { if (ok) sibacotExitApp(); });
+        customConfirm('Yakin ingin keluar dari aplikasi?', '🚪').then(ok => { if (ok) doLogout(); }); // RONDE 7: logo -> logout ke login (bukan tutup aplikasi)
       }
     }
 
