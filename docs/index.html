@@ -507,7 +507,16 @@
     .progress-bar-fill { height: 100%; border-radius: 20px; background: linear-gradient(90deg, var(--corp-blue), var(--corp-blue-light)); transition: width 0.5s ease; }
 
     .toast { visibility: hidden; min-width: 250px; margin-left: -125px; background-color: var(--corp-blue); color: var(--surface); text-align: center; border-radius: 20px; padding: 12px 20px; position: fixed; z-index: 99999; left: 50%; bottom: 30px; font-size: 13px; font-weight: bold; box-shadow: 0 4px 12px rgba(0,0,0,0.2); border: 2px solid var(--corp-gold); }
-    .toast.show { visibility: visible; animation: fadein 0.3s, fadeout 0.3s 2.7s; }
+    /* RONDE 6 — AKAR toast ganda (TERBUKTI dari kode + video uji HP
+       7 Nov 21:09): fadeout lama "fadeout 0.3s 2.7s" TANPA fill-mode
+       selesai di 3,0 dtk dan opacity kembali ke 1, sementara JS baru
+       melepas class "show" di 4,0 dtk — toast tampil, menghilang
+       0,3 dtk, MUNCUL LAGI, lalu hilang: pemilik melihatnya 2x.
+       Obat: fadeout berakhir TEPAT di 4,0 dtk (3.7s + 0.3s) dan
+       "forwards" menahan opacity 0 sesudahnya, jadi toast tampil
+       tepat 1x lalu hilang. JANGAN ubah angka ini tanpa menyelaraskan
+       timer 4000 ms di showToast. */
+    .toast.show { visibility: visible; animation: fadein 0.3s, fadeout 0.3s 3.7s forwards; }
     @keyframes fadein { from {bottom: 0; opacity: 0;} to {bottom: 30px; opacity: 1;} }
     @keyframes fadeout { from {bottom: 30px; opacity: 1;} to {bottom: 0; opacity: 0;} }
     .modal { display: none; position: fixed; z-index: 9999; left: 0; top: 0; width: 100%; height: 100%; background: rgba(1,31,123,0.7); align-items: center; justify-content: center; padding: 15px; }
@@ -842,13 +851,21 @@
       return new Date(parts[0], parts[1] - 1, parts[2]);
     }
 
+    // RONDE 6: satu instance saja. Sebelumnya, bila customConfirm
+    // dipanggil 2x selagi yang pertama masih menunggu (mis. ketuk ganda),
+    // 2 pasang listener menumpuk di tombol yang SAMA dan satu ketuk Oke
+    // menyelesaikan KEDUA promise — pemanggil jalan 2x (hapus 2x, toast
+    // 2x). Sekarang panggilan ke-2 mengembalikan promise yang sama.
+    let customConfirmPending = null;
     function customConfirm(pesan, icon) {
-      return new Promise((resolve) => {
+      if (customConfirmPending) return customConfirmPending;
+      customConfirmPending = new Promise((resolve) => {
         document.getElementById('confirmMsg').innerText = pesan;
         document.getElementById('confirmIcon').innerText = icon || '❓';
         document.getElementById('confirmModal').style.display = 'flex';
-        function onOke() { document.getElementById('confirmModal').style.display = 'none'; cleanup(); resolve(true); }
-        function onBatal() { document.getElementById('confirmModal').style.display = 'none'; cleanup(); resolve(false); }
+        function done(v) { document.getElementById('confirmModal').style.display = 'none'; cleanup(); customConfirmPending = null; resolve(v); }
+        function onOke() { done(true); }
+        function onBatal() { done(false); }
         function cleanup() {
           document.getElementById('confirmBtnOke').removeEventListener('click', onOke);
           document.getElementById('confirmBtnBatal').removeEventListener('click', onBatal);
@@ -856,6 +873,7 @@
         document.getElementById('confirmBtnOke').addEventListener('click', onOke);
         document.getElementById('confirmBtnBatal').addEventListener('click', onBatal);
       });
+      return customConfirmPending;
     }
 
 
@@ -881,8 +899,11 @@
     //    dialog -> Oke -> keluar, tanpa showToast apa pun di antaranya
     //    (toast "Tekan kembali sekali lagi" dihapus; doLogout dan
     //    handler popstate juga tidak me-toast — diaudit 7 Nov 2026).
-    // Urutan layar lain tidak berubah: modal -> tutup modal; submenu admin
-    // -> dashboard admin; dashboard admin -> checklist.
+    // Urutan layar (RONDE 6, aturan pemilik 7 Nov 21:09): modal ->
+    // tutup modal; submenu admin -> dashboard admin; checklist ADMIN
+    // -> dashboard admin; dashboard admin + checklist PIC + login ->
+    // tanya keluar. Cabang lama "dashboard admin -> checklist" DIHAPUS
+    // karena melanggar aturan itu (back di dasbor harus tanya keluar).
     // Flag sibacotExiting + timer 5 detik ronde 4 DIHAPUS — tidak ada lagi
     // keadaan "sudah Oke, menunggu back ke-2", jadi tidak ada lagi yang
     // perlu di-reset. Yang dipertahankan dari ronde 4: trap jujur
@@ -891,6 +912,11 @@
     // pengaman pageshow/visibilitychange/interval 5 detik.
     let sibacotTrapLive = false;
     let sibacotHandlingBack = false;
+    // RONDE 6: true hanya bila checklist sedang dibuka DARI dasbor admin
+    // (openAdminMenu('checklist')). PIC tidak pernah lewat sini — ia
+    // masuk checklist langsung dari login. Dipakai handleBack supaya
+    // back admin kembali ke dasbor, sementara back PIC tanya keluar.
+    let sibacotAdminInChecklist = false;
     function sibacotRearmTrap() {
       try { history.pushState({ sibacot: 1 }, ""); sibacotTrapLive = true; } catch (e) { sibacotTrapLive = false; }
     }
@@ -942,9 +968,13 @@
           if (document.getElementById("userModal").style.display === "flex") closeModal("userModal");
         } else if (view === "adminSection") {
           showAdminDasbor();
-        } else if (view === "adminDasbor") {
-          openAdminMenu("checklist");
-        } else { // checklist ATAU login = layar tingkat atas: tanya dulu
+        } else if (view === "checklist" && globalUser && globalUser.role === "Admin" && sibacotAdminInChecklist) {
+          // RONDE 6: checklist ADMIN adalah sub-layar dasbor — back
+          // kembali ke dasbor, BUKAN tanya keluar. PIC tidak pernah
+          // memenuhi syarat ini (flag hanya disetel openAdminMenu).
+          showAdminDasbor();
+        } else { // adminDasbor, checklist PIC, ATAU login = layar tingkat
+          // atas: tanya dulu (RONDE 6: dasbor admin juga tanya keluar).
           const ok = await customConfirm("Yakin ingin keluar?", "🚪");
           if (ok) sibacotExitApp(); // RONDE 5: langsung keluar, 1 langkah
           // Batal: tetap di tempat; trap sudah dipersenjatai ulang
@@ -1241,6 +1271,9 @@
     document.addEventListener("DOMContentLoaded", checkSession);
 
     function checkSession() {
+      sibacotAdminInChecklist = false; // RONDE 6: status checklist-admin
+      // dihitung ulang dari jalur masuk (dasbor admin vs langsung dari
+      // login) — jangan sampai bocor antar sesi/peran.
       try { globalUser = JSON.parse(localStorage.getItem("sibacot_user")); } catch (e) { globalUser = null; }
       try { globalSessionToken = localStorage.getItem("sibacot_session_token") || null; } catch (e) { globalSessionToken = null; }
       if (globalUser && !globalSessionToken) { globalUser = null; } // tanpa token server, sesi lokal tidak berlaku
@@ -1353,7 +1386,10 @@
       document.querySelectorAll('.admin-section').forEach(el => el.style.display = 'none');
       document.getElementById("viewAdminDasbor").style.display = "block";
       document.getElementById("fabAdd").style.display = "none";
-      sibacotPushNav(); // 5HAL-TEST: back dari dasbor admin -> checklist
+      sibacotAdminInChecklist = false; // RONDE 6: sudah di dasbor
+      // RONDE 6: entri history supaya back di dasbor dicegat popstate
+      // (lalu tanya keluar) — BUKAN supaya back pergi ke checklist.
+      sibacotPushNav();
     }
 
     function openAdminMenu(menu) {
@@ -1361,7 +1397,11 @@
       document.getElementById("viewChecklist").style.display = "none";
       document.getElementById("fabAdd").style.display = "none";
       document.querySelectorAll('.admin-section').forEach(el => el.style.display = 'none');
+      sibacotAdminInChecklist = false;
       if (menu === 'checklist') {
+        // RONDE 6: checklist dibuka dari dasbor admin — back harus
+        // kembali ke dasbor, bukan tanya keluar.
+        sibacotAdminInChecklist = true;
         document.getElementById("viewChecklist").style.display = "block";
         document.getElementById("btnBackToAdmin1").style.display = "block";
         document.getElementById("fabAdd").style.display = "flex";
@@ -1859,17 +1899,31 @@
       document.getElementById('taskModal').style.display = 'flex';
     }
 
+    // RONDE 6: pengaman lapis ke-2 (lapis ke-1 = perbaikan animasi toast
+    // di CSS; lapis ke-3 = customConfirm satu instance). Tanpa guard ini,
+    // ketuk Hapus ke-2 selagi hapus pertama masih jalan (API lambat)
+    // akan menjalankan deleteTask ke-2 dan toast ke-2.
+    let deletingTask = false;
     async function executeDeleteTask() {
+      if (deletingTask) return;
+      // RONDE 6: guard diklaim DI SINI, sebelum await apa pun — dua
+      // panggilan bersamaan (ketuk ganda) tidak boleh sama-sama lolos.
+      deletingTask = true;
+      const btnDel = document.getElementById('btnDelTask');
+      if (btnDel) btnDel.disabled = true;
+      try {
       const id = document.getElementById('inIdTask').value;
       const ok = await customConfirm("Yakin hapus tugas ini secara permanen?", "🗑️");
       if (!ok) return;
-      closeModal('taskModal');
-      // 5HAL-TEST: hanya toast sukses bila server benar-benar sukses.
-      // Sebelumnya toast ini tampil apa pun hasil server (termasuk saat
-      // callAPI sudah men-toast error) sehingga satu aksi tampil 2 toast.
-      const delRes = await callAPI({ action: "deleteTask", ID_Task: id });
-      loadData();
-      if (delRes && delRes.status === "success") showToast("Tugas dihapus.");
+        closeModal('taskModal');
+        // 5HAL-TEST: hanya toast sukses bila server benar-benar sukses.
+        const delRes = await callAPI({ action: "deleteTask", ID_Task: id });
+        loadData();
+        if (delRes && delRes.status === "success") showToast("Tugas dihapus.");
+      } finally {
+        deletingTask = false;
+        if (btnDel) btnDel.disabled = false;
+      }
     }
 
     async function submitUser() {
@@ -1911,14 +1965,23 @@
       document.getElementById('userModal').style.display = 'flex';
     }
 
+    // RONDE 6: guard yang sama seperti executeDeleteTask (audit: pola
+    // async + customConfirm + toast tanpa guard juga ada di sini).
+    let deletingUser = false;
     async function deleteUser(uname) {
+      if (deletingUser) return;
       if (uname === 'admin') { showToast("Admin utama tidak boleh dihapus."); return; }
+      // RONDE 6: guard diklaim sebelum await (alasan sama seperti
+      // executeDeleteTask di atas).
+      deletingUser = true;
+      try {
       const ok = await customConfirm(`Hapus permanen user ${uname}?`, "⚠️");
       if (!ok) return;
-      const delUserRes = await callAPI({ action: "deleteUser", username: uname });
-      loadData();
-      // 5HAL-TEST: hanya toast sukses bila server benar-benar sukses.
-      if (delUserRes && delUserRes.status === "success") showToast("User dihapus.");
+        const delUserRes = await callAPI({ action: "deleteUser", username: uname });
+        loadData();
+        // 5HAL-TEST: hanya toast sukses bila server benar-benar sukses.
+        if (delUserRes && delUserRes.status === "success") showToast("User dihapus.");
+      } finally { deletingUser = false; }
     }
 
     async function saveSettings(e) {
