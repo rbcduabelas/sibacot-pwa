@@ -860,48 +860,38 @@
 
 
 
-    // ==== RONDE 4: tombol back HP (History API, konfirmasi buatan aplikasi) ====
-    // Menggantikan blok RONDE 3. Niat tetap sama (permintaan pemilik 7 Nov
-    // 2026 — back di layar login HARUS bertanya dulu, bukan langsung keluar):
-    // back dicegat di SEMUA layar tingkat atas, TERMASUK layar login.
-    // Urutan layar dalam aplikasi: modal -> tutup modal; submenu admin ->
-    // dashboard admin; dashboard admin -> checklist; checklist & login ->
-    // customConfirm "Yakin ingin keluar?". Bila Oke: toast "Tekan kembali
-    // sekali lagi untuk keluar", lalu back sekali lagi keluar. Bila Batal:
-    // tetap di tempat, trap tetap hidup.
-    //
-    // Perbaikan RONDE 4 atas kelemahan RONDE 3 (temuan dari audit kode —
-    // penyebab pasti gagal di HP belum diketahui, karena HP pemilik
-    // kemungkinan masih menjalankan kode lama dari cache service worker,
-    // yang dimatikan total di ronde ini):
-    // (1) sibacotTrapLive kini JUJUR: di-nol-kan setiap kali satu entri
-    //     history dikonsumsi (awal listener popstate), baru diset true
-    //     saat re-arm berhasil. Di RONDE 3 flag ini tidak pernah false
-    //     lagi setelah seed pertama, sehingga perbaikan darurat di
-    //     checkSession ("re-arm bila trap mati") tidak pernah bisa jalan.
-    // (2) Back yang ditekan dua kali cepat saat konfirmasi masih terbuka
-    //     tidak lagi menjalankan dua handler bersamaan (RONDE 3: dua
-    //     customConfirm bisa tumpang tindih dan saling membatalkan).
-    //     Handler kedua hanya membatalkan konfirmasi yang sedang tampil.
-    // (3) Flag sibacotExiting (sudah Oke keluar) kini punya masa tenggang
-    //     5 detik: bila pemilik ternyata tetap di aplikasi (tidak menekan
-    //     back kedua), trap dipasang lagi otomatis. Di RONDE 3 flag ini
-    //     hidup selamanya — pemilik yang menekan Oke lalu berubah pikiran
-    //     dan lanjut memakai aplikasi kehilangan trap untuk sisa sesi.
-    //     doLogout juga me-reset flag ini.
-    // (4) Jaring pengaman: setiap kali halaman kembali terlihat
-    //     (pageshow/visibilitychange) dan trap mati, trap dipasang lagi;
-    //     plus pemeriksaan berkala 5 detik yang hanya memasang bila trap
-    //     mati (tidak pernah menambah entri bila trap sudah hidup).
-    // (5) sibacotBackBusy dihapus — tidak pernah dibaca siapa pun kecuali
-    //     sibacotPushNav, dan logika barunya memakai sibacotHandlingBack
-    //     yang memang dijaga di handler.
+    // ==== RONDE 5: tombol back HP — keluar 1 langkah + jembatan Android ====
+    // Menggantikan blok RONDE 4 (7 Nov 2026). Alasan: uji HP ronde 4
+    // (7 Nov 15:54, 2 video) menunjukkan alur keluar 2 langkah terasa
+    // dobel — dialog "Yakin ingin keluar?" LALU toast "Tekan kembali
+    // sekali lagi untuk keluar" + tekan back ke-2 — dan di tab browser
+    // keluar terakhir hanya mundur ke halaman sebelumnya (Google), karena
+    // halaman web tidak boleh menutup tab-nya sendiri. Maka:
+    //  - back di layar tingkat atas (checklist/login) -> customConfirm
+    //    "Yakin ingin keluar?" -> Oke = LANGSUNG keluar, 1 langkah, tanpa
+    //    toast kedua dan tanpa tekan back ke-2. Batal = tetap di tempat,
+    //    trap tetap hidup.
+    //  - "Keluar" di web = doLogout() -> kembali ke layar login (bukan
+    //    history.back() ke halaman sebelumnya).
+    //  - "Keluar" di dalam APK WebView = bridge Android.exitApp() ->
+    //    aplikasi menutup (lihat sibacotExitApp; APK di
+    //    workspace/sibacot-security/apk/). Di browser biasa (tanpa objek
+    //    Android) perilaku tetap doLogout seperti di atas.
+    //  - RONDE 5: TIDAK ADA toast di jalur keluar. Satu back -> satu
+    //    dialog -> Oke -> keluar, tanpa showToast apa pun di antaranya
+    //    (toast "Tekan kembali sekali lagi" dihapus; doLogout dan
+    //    handler popstate juga tidak me-toast — diaudit 7 Nov 2026).
+    // Urutan layar lain tidak berubah: modal -> tutup modal; submenu admin
+    // -> dashboard admin; dashboard admin -> checklist.
+    // Flag sibacotExiting + timer 5 detik ronde 4 DIHAPUS — tidak ada lagi
+    // keadaan "sudah Oke, menunggu back ke-2", jadi tidak ada lagi yang
+    // perlu di-reset. Yang dipertahankan dari ronde 4: trap jujur
+    // (sibacotTrapLive di-nol-kan di awal popstate), handler ganda saat
+    // konfirmasi terbuka hanya membatalkan konfirmasi, dan jaring
+    // pengaman pageshow/visibilitychange/interval 5 detik.
     let sibacotTrapLive = false;
-    let sibacotExiting = false;
     let sibacotHandlingBack = false;
-    let sibacotExitTimer = null;
     function sibacotRearmTrap() {
-      if (sibacotExiting) return; // sedang keluar: jangan pasang jebakan baru
       try { history.pushState({ sibacot: 1 }, ""); sibacotTrapLive = true; } catch (e) { sibacotTrapLive = false; }
     }
     function sibacotPushNav() {
@@ -910,12 +900,14 @@
       // satu langkah masuk, supaya satu back = satu langkah mundur.
       sibacotRearmTrap();
     }
-    function sibacotResetExit() {
-      // Pemilik menekan Oke keluar tapi ternyata tetap di aplikasi:
-      // hidupkan lagi trap-nya. Dipanggil sekali 5 detik setelah Oke;
-      // bila pemilik sudah pergi (halaman ditinggal), timer tidak jalan.
-      sibacotExiting = false;
-      sibacotRearmTrap();
+    function sibacotExitApp() {
+      // RONDE 5: satu pintu keluar untuk back + ketuk-dua-kali logo.
+      // Di dalam APK WebView, bridge Android menutup aplikasi; di browser
+      // biasa (tanpa window.Android) keluar = logout ke layar login.
+      if (window.Android && typeof window.Android.exitApp === "function") {
+        try { window.Android.exitApp(); return; } catch (e) { /* jatuh ke doLogout */ }
+      }
+      doLogout();
     }
     function sibacotCurrentView() {
       const disp = (id) => { const el = document.getElementById(id); return el ? el.style.display : ""; };
@@ -929,7 +921,6 @@
       return "checklist";
     }
     async function sibacotHandleBack() {
-      if (sibacotExiting) return; // sudah Oke keluar: biarkan back berjalan
       if (sibacotHandlingBack) {
         // Back kedua saat handler pertama masih berjalan (biasanya saat
         // konfirmasi "Yakin ingin keluar?" masih terbuka): batalkan saja
@@ -955,15 +946,7 @@
           openAdminMenu("checklist");
         } else { // checklist ATAU login = layar tingkat atas: tanya dulu
           const ok = await customConfirm("Yakin ingin keluar?", "🚪");
-          if (ok) {
-            sibacotExiting = true;
-            showToast("Tekan kembali sekali lagi untuk keluar");
-            // Bila pemilik tetap di sini (tidak menekan back kedua),
-            // hidupkan lagi trap setelah 5 detik (lihat sibacotResetExit).
-            if (sibacotExitTimer) clearTimeout(sibacotExitTimer);
-            sibacotExitTimer = setTimeout(sibacotResetExit, 5000);
-            history.back();
-          }
+          if (ok) sibacotExitApp(); // RONDE 5: langsung keluar, 1 langkah
           // Batal: tetap di tempat; trap sudah dipersenjatai ulang
           // secara sinkron di listener popstate sebelum handler jalan.
         }
@@ -974,9 +957,6 @@
     window.addEventListener("popstate", () => {
       // Satu entri history baru saja dikonsumsi oleh back ini.
       sibacotTrapLive = false;
-      // Bila pemilik sudah menekan Oke untuk keluar, jangan re-arm dan
-      // jangan panggil handler — biarkan navigasi back jalan.
-      if (sibacotExiting) return;
       // Persenjatai ulang trap DULU, sinkron, sebelum sibacotHandleBack
       // berjalan — termasuk saat modal konfirmasi sedang terbuka dan
       // termasuk di layar login, sehingga back berikutnya tetap dicegat.
@@ -987,11 +967,11 @@
     // pernah gagal), pasang lagi saat halaman kembali terlihat. Pemeriksaan
     // berkala hanya memasang bila trap mati — tidak menambah entri history
     // bila trap sudah hidup.
-    window.addEventListener("pageshow", () => { if (!sibacotTrapLive && !sibacotExiting) sibacotRearmTrap(); });
-    document.addEventListener("visibilitychange", () => { if (!document.hidden && !sibacotTrapLive && !sibacotExiting) sibacotRearmTrap(); });
-    setInterval(() => { if (!sibacotTrapLive && !sibacotExiting) sibacotRearmTrap(); }, 5000);
+    window.addEventListener("pageshow", () => { if (!sibacotTrapLive) sibacotRearmTrap(); });
+    document.addEventListener("visibilitychange", () => { if (!document.hidden && !sibacotTrapLive) sibacotRearmTrap(); });
+    setInterval(() => { if (!sibacotTrapLive) sibacotRearmTrap(); }, 5000);
     sibacotRearmTrap(); // entri seed saat load
-    // ==== AKHIR RONDE 4 back HP ====
+    // ==== AKHIR RONDE 5 back HP ====
     const TIMEOUT_MENIT = 3;
     const TIMEOUT_MS = TIMEOUT_MENIT * 60 * 1000;
     const WARNING_MS = (TIMEOUT_MENIT - 1) * 60 * 1000;
@@ -1314,7 +1294,7 @@
       else if (logoTapCount >= 2) {
         clearTimeout(logoTapTimer);
         logoTapCount = 0;
-        customConfirm('Yakin ingin keluar dari aplikasi?', '🚪').then(ok => { if (ok) doLogout(); });
+        customConfirm('Yakin ingin keluar dari aplikasi?', '🚪').then(ok => { if (ok) sibacotExitApp(); });
       }
     }
 
@@ -1356,10 +1336,6 @@
 
     function doLogout() {
       stopAutoLogout();
-      // RONDE 4: pemilik kembali ke layar login — trap back harus hidup
-      // lagi (flag keluar dari sesi sebelumnya jangan terbawa).
-      sibacotExiting = false;
-      if (sibacotExitTimer) { clearTimeout(sibacotExitTimer); sibacotExitTimer = null; }
       globalUser = null;
       globalSessionToken = null;
       notifTaskSudahDikirim.clear();
