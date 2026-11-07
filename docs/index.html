@@ -571,7 +571,7 @@
                id, onclick, dan logika tampil/sembunyi tidak berubah. -->
           <div class="login-actions-row">
             <button type="button" id="btnLogin" class="btn-login-custom" onclick="doLogin()">LOGIN</button>
-            <button type="button" id="btnPasskeyLogin" class="btn-passkey btn-passkey-icon" onclick="loginWithPasskey()" aria-label="Masuk dengan sidik jari" title="Masuk dengan sidik jari"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 11a3 3 0 0 1 3 3c0 2.5-.5 5-1.5 7"/><path d="M12 8a6 6 0 0 1 6 6c0 3-.6 6-1.8 8.4"/><path d="M12 5a9 9 0 0 1 9 9c0 3.6-.8 7-2.3 10"/><path d="M6.5 9.5A9 9 0 0 0 3 14c0 3.6.8 7 2.3 10"/><path d="M9.5 10.5A6 6 0 0 0 6 14c0 3 .6 6 1.8 8.4"/><path d="M12 14v7.5"/></svg></button>
+            <button type="button" id="btnPasskeyLogin" class="btn-passkey btn-passkey-icon" onclick="loginWithPasskey()" aria-label="Masuk dengan sidik jari" title="Masuk dengan sidik jari"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 4a8 8 0 0 1 8 8c0 4-.9 7.3-2.2 9.8"/><path d="M12 4a8 8 0 0 0-8 8c0 4 .9 7.3 2.2 9.8"/><path d="M12 7.5a4.5 4.5 0 0 1 4.5 4.5c0 3.2-.6 6-1.6 8.3"/><path d="M12 7.5a4.5 4.5 0 0 0-4.5 4.5c0 3.2.6 6 1.6 8.3"/><path d="M12 11a1.5 1.5 0 0 1 1.5 1.5c0 2-.3 4-.9 5.7"/><path d="M12 11a1.5 1.5 0 0 0-1.5 1.5c0 2 .3 4 .9 5.7"/></svg></button>
           </div>
           <div id="passkeyLoginNote" style="font-size:11px; color:#888; margin-top:8px; text-align:center;"></div>
         </div>
@@ -856,31 +856,28 @@
       });
     }
 
-    // ==== RONDE 2: tombol back HP (History API, konfirmasi buatan aplikasi) ====
-    // Menggantikan blok 5HAL-TEST: pola lama punya dua cacat yang terlihat
-    // di HP pemilik 7 Nov 2026 (back langsung keluar, tanpa konfirmasi):
-    // (1) entri seed di-push sekali saat load; bila back ditekan di layar
-    // login, handler return dini TANPA push ulang sehingga trap hilang
-    // permanen untuk sisa sesi; (2) selama modal konfirmasi terbuka, trap
-    // sedang tidak bersenjata — push baru dilakukan SETELAH customConfirm
-    // resolve — jadi back kedua saat modal terbuka langsung keluar halaman.
-    // Pola baru:
+    // ==== RONDE 3: tombol back HP (History API, konfirmasi buatan aplikasi) ====
+    // Menggantikan blok RONDE 2. Perubahan desain (permintaan pemilik 7 Nov
+    // 2026 — back di layar login HARUS bertanya dulu, bukan langsung keluar):
+    // back dicegat di SEMUA layar tingkat atas, TERMASUK layar login.
     // (a) trap dipersenjatai ulang SECARA SINKRON di awal listener
-    // popstate, MENGABAIKAN guard sibacotBackBusy (sibacotRearmTrap) —
-    // sebelum handler async apa pun berjalan;
-    // (b) checkSession memastikan trap hidup setiap kali tampilan
-    // aplikasi dimasuki (flag sibacotTrapLive; bila trap sudah habis
-    // karena back di layar login, di-push ulang saat login berhasil);
-    // (c) di layar login, back TIDAK dicegat dan TIDAK dipersenjatai
-    // ulang — pengguna tetap bisa keluar (back pertama menghabiskan
-    // entri trap, back kedua keluar ke halaman sebelumnya).
-    // Catatan: entri trap yang menumpuk dari navigasi dalam aplikasi
-    // (showAdminDasbor/openAdminMenu/openModal mem-push tiap navigasi)
-    // hanya berarti beberapa kali back ekstra di layar login setelah
-    // logout; itu perilaku lama yang tidak diubah di ronde ini.
+    // popstate, sebelum handler async apa pun berjalan — kecuali saat
+    // flag sibacotExiting aktif (pemilik sudah menekan Oke untuk keluar:
+    // biarkan navigasi back berjalan, jangan re-arm, jangan konfirmasi
+    // lagi); (b) checkSession memastikan trap hidup setiap kali tampilan
+    // berubah (aplikasi maupun login), termasuk setelah doLogout;
+    // (c) di layar checklist DAN layar login, back menampilkan
+    // customConfirm "Yakin ingin keluar?" (BUKAN confirm() native).
+    // Bila Oke: set sibacotExiting = true, toast "Tekan kembali sekali
+    // lagi untuk keluar", lalu history.back() sekali — back berikutnya
+    // tidak dicegat lagi. Bila Batal: tetap di tempat, trap tetap hidup.
+    // Back menelusuri layar dalam aplikasi dulu (modal → tutup; submenu
+    // admin → dashboard; dashboard admin → checklist).
     let sibacotBackBusy = false;
     let sibacotTrapLive = false;
+    let sibacotExiting = false;
     function sibacotRearmTrap() {
+      if (sibacotExiting) return; // sedang keluar: jangan pasang jebakan baru
       try { history.pushState({ sibacot: 1 }, ""); sibacotTrapLive = true; } catch (e) {}
     }
     function sibacotPushNav() {
@@ -899,8 +896,8 @@
       return "checklist";
     }
     async function sibacotHandleBack() {
+      if (sibacotExiting) return; // sudah Oke keluar: biarkan back berjalan
       const view = sibacotCurrentView();
-      if (view === "login") return; // jangan dicegat di layar login
       sibacotBackBusy = true;
       try {
         if (view === "confirm") {
@@ -914,27 +911,34 @@
           showAdminDasbor();
         } else if (view === "adminDasbor") {
           openAdminMenu("checklist");
-        } else { // checklist = layar utama dalam aplikasi
+        } else { // checklist ATAU login = layar tingkat atas: tanya dulu
           const ok = await customConfirm("Yakin ingin keluar?", "🚪");
-          if (ok) { doLogout(); return; } // ke layar login; trap sudah dipersenjatai di listener
+          if (ok) {
+            sibacotExiting = true;
+            showToast("Tekan kembali sekali lagi untuk keluar");
+            history.back();
+          }
+          // Batal: tetap di tempat; trap sudah dipersenjatai ulang
+          // secara sinkron di listener popstate sebelum handler jalan.
         }
       } finally {
         sibacotBackBusy = false;
       }
-      // RONDE 2: TIDAK ada push lagi di sini — trap sudah dipersenjatai
-      // ulang secara sinkron di listener popstate sebelum handler jalan.
+      // RONDE 3: TIDAK ada push lagi di sini — trap dipersenjatai ulang
+      // secara sinkron di listener popstate sebelum handler jalan.
     }
     window.addEventListener("popstate", () => {
-      // RONDE 2 (a): persenjatai ulang trap DULU, sinkron, sebelum
-      // sibacotHandleBack berjalan — termasuk saat modal konfirmasi
-      // sedang terbuka, sehingga back kedua membatalkan modal, bukan
-      // keluar halaman.
-      if (sibacotCurrentView() !== "login") sibacotRearmTrap();
-      else sibacotTrapLive = false; // entri trap habis di layar login
+      // RONDE 3: bila pemilik sudah menekan Oke untuk keluar, jangan
+      // re-arm dan jangan panggil handler — biarkan navigasi back jalan.
+      if (sibacotExiting) return;
+      // Persenjatai ulang trap DULU, sinkron, sebelum sibacotHandleBack
+      // berjalan — termasuk saat modal konfirmasi sedang terbuka dan
+      // termasuk di layar login, sehingga back berikutnya tetap dicegat.
+      sibacotRearmTrap();
       sibacotHandleBack();
     });
     sibacotRearmTrap(); // entri seed saat load
-    // ==== AKHIR RONDE 2 back HP ====
+    // ==== AKHIR RONDE 3 back HP ====
 
     const TIMEOUT_MENIT = 3;
     const TIMEOUT_MS = TIMEOUT_MENIT * 60 * 1000;
@@ -1219,7 +1223,7 @@
           document.querySelectorAll('.admin-section').forEach(el => el.style.display = 'none');
         }
         resetAutoLogout();
-        // RONDE 2 (b): pastikan trap back hidup setiap kali tampilan
+        // RONDE 3: pastikan trap back hidup setiap kali tampilan
         // aplikasi dimasuki — menutup cacat lama: back di layar login
         // menghabiskan entri seed sehingga trap hilang untuk sisa sesi
         // (mis. back di login, lalu login, lalu back di checklist harus
@@ -1240,6 +1244,10 @@
         stopAutoLogout();
         if (notifCheckInterval) { clearInterval(notifCheckInterval); notifCheckInterval = null; }
         pkUpdatePasskeyUI();
+        // RONDE 3: pastikan trap back hidup juga di layar login (mis.
+        // setelah doLogout biasa) — back di login tetap menampilkan
+        // konfirmasi "Yakin ingin keluar?", bukan langsung keluar.
+        if (!sibacotTrapLive) sibacotRearmTrap();
         loadSettingsOnlyForLogin().finally(() => { const lo = document.getElementById('loadingOverlay'); if (lo) lo.style.display = 'none'; });
       }
     }
@@ -1376,9 +1384,12 @@
           transports: (cred.response.getTransports ? cred.response.getTransports() : []) });
         if (fin && fin.status === "success") { showToast(fin.message || "Sidik jari berhasil didaftarkan."); pkRefreshPasskeyList(); }
       } catch (err) {
-        // Error navigator (NotAllowedError saat batal/ditolak, dll) punya
-        // .name sendiri; error callAPI sudah di-toast dan namanya "Error".
-        if (err && err.name && err.name !== "Error") showToast("Sidik jari gagal: " + err.name);
+        // RONDE 3: hanya error dari navigator WebAuthn yang di-toast di
+        // sini (DOMException: NotAllowedError saat batal/ditolak dsb).
+        // Error dari callAPI (Error/TypeError/SyntaxError jaringan/JSON)
+        // sudah di-toast callAPI — men-toast-nya lagi di sini membuat
+        // satu kegagalan tampil 2x.
+        if (err instanceof DOMException) showToast("Sidik jari gagal: " + err.name);
       } finally { if (btn) btn.disabled = false; }
     }
     async function loginWithPasskey() {
@@ -1407,7 +1418,9 @@
           userHandle: assertion.response.userHandle ? pkB64urlEncodeBuf(assertion.response.userHandle) : "" });
         if (fin && fin.status === "success" && fin.sessionToken) pkApplyLoginSuccess(fin);
       } catch (err) {
-        if (err && err.name && err.name !== "Error") showToast("Login sidik jari gagal: " + err.name);
+        // RONDE 3: sama seperti registerPasskey — hanya DOMException
+        // navigator yang di-toast; error callAPI sudah di-toast callAPI.
+        if (err instanceof DOMException) showToast("Login sidik jari gagal: " + err.name);
       } finally { if (btn) btn.disabled = false; }
     }
 
