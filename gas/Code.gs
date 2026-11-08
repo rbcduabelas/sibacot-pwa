@@ -348,7 +348,16 @@ function getLatestCompletionYmdMap_(ss) {
   for (let i = 1; i < data.length; i++) {
     const idTask = String(data[i][1] || "");
     if (!idTask) continue;
-    const ymd = parseRekapDateYmd_(data[i][0]);
+    // RONDE 8 (2026-11-08): tanggal dari Rekap_Key (kolom G) lebih dulu.
+    // Kunci ditulis dari tanggal asli saat ceklis ("yyyy-MM-dd_ID") dan
+    // tersimpan sebagai teks, sehingga kebal dari salah-parsing locale
+    // Sheets — locale US menukar hari/bulan pada tanggal kolom A yang
+    // ditulis "dd/MM/yyyy" (mis. 12 Agu 2026 tersimpan sebagai 8 Des
+    // 2026). Fallback ke kolom A untuk baris lama tanpa kunci.
+    let ymd = "";
+    const keyMatch = String(data[i][6] || "").match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (keyMatch) ymd = keyMatch[0];
+    else ymd = parseRekapDateYmd_(data[i][0]);
     if (!ymd) continue;
     if (!map[idTask] || ymd > map[idTask]) map[idTask] = ymd;
   }
@@ -737,7 +746,6 @@ function prosesAPI(payload) {
 
     if (action === "getData") {
       const nowGetData = new Date();
-      const todayDateStr = Utilities.formatDate(nowGetData, APP_TZ, "dd/MM/yyyy");
       const todayYmd = Utilities.formatDate(nowGetData, APP_TZ, "yyyy-MM-dd");
       const isTodayHoliday = isHolidayYmd_(ss, todayYmd);
       // Jangan cleanup tugas tambahan saat getData, agar setelah diceklis tetap terlihat sampai periode tampilnya selesai.
@@ -748,15 +756,26 @@ function prosesAPI(payload) {
       if (shRekap) {
         const rData = shRekap.getDataRange().getValues();
         for (let i = 1; i < rData.length; i++) {
-          let waktuRekap = rData[i][0];
-          let dateOnly = "";
-          if (waktuRekap instanceof Date) {
-            dateOnly = Utilities.formatDate(waktuRekap, APP_TZ, "dd/MM/yyyy");
-            waktuRekap = Utilities.formatDate(waktuRekap, APP_TZ, "dd/MM/yyyy HH:mm:ss");
-          } else if (typeof waktuRekap === "string") {
-            dateOnly = waktuRekap.substring(0, 10);
+          const rawWaktu = rData[i][0];
+          // RONDE 8: tanggal dari Rekap_Key (kolom G) lebih dulu — kebal
+          // salah-parsing locale (lihat getLatestCompletionYmdMap_).
+          let ymdRekap = "";
+          const keyMatch = String(rData[i][6] || "").match(/^(\d{4})-(\d{2})-(\d{2})/);
+          if (keyMatch) ymdRekap = keyMatch[0];
+          else ymdRekap = parseRekapDateYmd_(rawWaktu);
+          let waktuRekap = rawWaktu;
+          if (rawWaktu instanceof Date) {
+            waktuRekap = Utilities.formatDate(rawWaktu, APP_TZ, "dd/MM/yyyy HH:mm:ss");
           }
-          if (dateOnly === todayDateStr) completedTodayIds.push(rData[i][1]);
+          // Tampilkan tanggal yang benar di rekap admin: tanggal dari kunci
+          // + jam dari nilai tersimpan (jam tidak terpengaruh swap hari/bulan).
+          if (keyMatch) {
+            const jam = (rawWaktu instanceof Date)
+              ? Utilities.formatDate(rawWaktu, APP_TZ, "HH:mm:ss")
+              : String(rawWaktu).substring(11, 19);
+            waktuRekap = keyMatch[3] + "/" + keyMatch[2] + "/" + keyMatch[1] + (jam ? " " + jam : "");
+          }
+          if (ymdRekap === todayYmd) completedTodayIds.push(rData[i][1]);
           if (sessionUser.role === "Admin") {
             rekapDataReturn.push({ waktu: waktuRekap, id: rData[i][1], deskripsi: rData[i][2], tipe: rData[i][3], pic: rData[i][4] });
           }
@@ -895,19 +914,24 @@ function prosesAPI(payload) {
             if (!shRekap) return { status: "error", message: "Sheet Rekapan tidak ditemukan." };
             if (shRekap.getLastColumn() < 7 || shRekap.getRange(1, 7).getValue() !== "Rekap_Key") shRekap.getRange(1, 7).setValue("Rekap_Key");
             const rekapData = shRekap.getDataRange().getValues();
-            const todayStr = Utilities.formatDate(new Date(), APP_TZ, "dd/MM/yyyy");
             const todayYmd = Utilities.formatDate(new Date(), APP_TZ, "yyyy-MM-dd");
             const rekapKey = getRekapKey_(payload.ID_Task, todayYmd);
             let foundRowIndex = -1;
             for (let r = 1; r < rekapData.length; r++) {
-              let rowDate = "";
-              if (rekapData[r][0] instanceof Date) rowDate = Utilities.formatDate(rekapData[r][0], APP_TZ, "dd/MM/yyyy");
-              else if (typeof rekapData[r][0] === "string") rowDate = rekapData[r][0].substring(0, 10);
+              // RONDE 8: bandingkan ymd (dari kunci dulu, lalu kolom A) agar
+              // kebal salah-parsing locale dan format tulis baru (ISO).
+              let rowYmd = "";
+              const rowKeyMatch = String(rekapData[r][6] || "").match(/^(\d{4})-(\d{2})-(\d{2})/);
+              if (rowKeyMatch) rowYmd = rowKeyMatch[0];
+              else rowYmd = parseRekapDateYmd_(rekapData[r][0]);
               const rowKey = rekapData[r][6];
-              if (rowKey === rekapKey || (rekapData[r][1] == payload.ID_Task && rowDate === todayStr)) { foundRowIndex = r + 1; break; }
+              if (rowKey === rekapKey || (rekapData[r][1] == payload.ID_Task && rowYmd === todayYmd)) { foundRowIndex = r + 1; break; }
             }
             if (payload.Status === "Selesai") {
-              const waktuBaru = Utilities.formatDate(new Date(), APP_TZ, "dd/MM/yyyy HH:mm:ss");
+              // RONDE 8: tulis ISO + apostrof agar Sheets menyimpannya sebagai
+              // teks murni (kebal locale). parseRekapDateYmd_ sudah menangani
+              // format "yyyy-MM-dd HH:mm:ss".
+              const waktuBaru = "'" + Utilities.formatDate(new Date(), APP_TZ, "yyyy-MM-dd HH:mm:ss");
               const row = [waktuBaru, payload.ID_Task, data[i][1], data[i][2], data[i][4], "Selesai", rekapKey];
               if (foundRowIndex > -1) shRekap.getRange(foundRowIndex, 1, 1, 7).setValues([row]);
               else shRekap.appendRow(row);
