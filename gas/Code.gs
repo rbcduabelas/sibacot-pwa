@@ -265,13 +265,19 @@ function isValidYmd_(s) {
   return d.getFullYear() === p[0] && d.getMonth() === p[1] - 1 && d.getDate() === p[2];
 }
 
-function validateTaskPayload_(payload) {
+function validateTaskPayload_(payload, isOverdue) {
   if (!payload) return "Payload kosong.";
   const tipe = String(payload.Tipe || "").trim();
   if (!TASK_TYPES.includes(tipe)) return "Tipe tugas tidak valid.";
   if (!String(payload.Deskripsi || "").trim()) return "Deskripsi tugas wajib diisi.";
   if (!String(payload.PIC || "").trim()) return "PIC wajib dipilih.";
   const deadline = String(payload.Deadline || "").trim();
+  // RONDE 9 (2026-11-09): baris overdue menyimpan Deadline sebagai tanggal
+  // yyyy-MM-dd, apa pun Tipe-nya (mis. Bulanan yang deadline normalnya angka
+  // 1-31). Aturan deadline per-Tipe di bawah ini tidak berlaku untuk baris
+  // overdue; sanitasi nilainya dilakukan di handler editTask (nilai bukan
+  // tanggal valid dipertahankan dari data lama, tidak menimpa).
+  if (isOverdue) return null;
   if (tipe === "Harian") return null;
   if (tipe === "Mingguan" && !Object.prototype.hasOwnProperty.call(WEEK_DAYS, deadline)) return "Deadline mingguan harus berupa nama hari yang valid.";
   // RONDE 2: Triwulan/Semester/Tahunan mengikuti pola Bulanan — deadline
@@ -951,7 +957,7 @@ function prosesAPI(payload) {
       const isOverduePayload = String(payload.ID_Task || "").indexOf("OVD-") === 0;
       if (isOverduePayload && currentUser.role !== "Admin") return { status: "error", message: "Tugas overdue hanya dapat diedit oleh Admin." };
       if (currentUser.role !== "Admin") payload.PIC = currentUser.username;
-      const err = validateTaskPayload_(payload);
+      const err = validateTaskPayload_(payload, isOverduePayload);
       if (err) return { status: "error", message: err };
       const kategori = DATA_SHEETS;
       for (let k = 0; k < kategori.length; k++) {
@@ -973,10 +979,21 @@ function prosesAPI(payload) {
               // dengan "-" — kehilangan data diam-diam. Untuk baris overdue,
               // "-" / kosong TIDAK PERNAH boleh menimpa deadline yang ada:
               // pertahankan nilai lama.
-              if (!deadline || String(deadline).trim() === "-") deadline = String(data[i][3] || "");
+              // RONDE 9 (2026-11-09): guard lama hanya menahan deadline kosong/"-";
+              // angka mentah (mis. "31" dari form edit number 1-31) lolos dan menimpa
+              // tanggal asli. Sekarang deadline BUKAN tanggal yyyy-MM-dd yang valid
+              // TIDAK PERNAH menimpa — pertahankan nilai lama (dinormalisasi ke
+              // yyyy-MM-dd bila tersimpan sebagai Date). Tgl_Mulai/Progress kosong
+              // juga dipertahankan, bukan ditimpa "".
+              const oldDeadline = toYmd_(data[i][3]) || String(data[i][3] || "").trim();
+              if (!deadline || String(deadline).trim() === "-" || !isValidYmd_(deadline)) deadline = oldDeadline;
+              const oldTglMulai = toYmd_(data[i][6]) || String(data[i][6] || "").trim();
+              const oldProgress = String(data[i][7] || "");
+              const newTglMulai = payload.Tgl_Mulai ? String(payload.Tgl_Mulai) : oldTglMulai;
+              const newProgress = payload.Progress ? payload.Progress : oldProgress;
               // Overdue tetap berada di sheet Overdue. Admin boleh mengubah uraian, tipe, deadline, PIC, mulai, dan progress.
               sh.getRange(i + 1, 2, 1, 4).setValues([[String(payload.Deskripsi).trim(), payload.Tipe, deadline, payload.PIC]]);
-              sh.getRange(i + 1, 7, 1, 2).setValues([[payload.Tgl_Mulai || "", payload.Progress || ""]]);
+              sh.getRange(i + 1, 7, 1, 2).setValues([[newTglMulai, newProgress]]);
             } else if (data[i][2] !== payload.Tipe) {
               sh.deleteRow(i + 1);
               ss.getSheetByName(payload.Tipe).appendRow([payload.ID_Task, String(payload.Deskripsi).trim(), payload.Tipe, deadline, payload.PIC, data[i][5], payload.Tgl_Mulai || "", payload.Progress || "", data[i][8] || "", data[i][9] || ""]);
