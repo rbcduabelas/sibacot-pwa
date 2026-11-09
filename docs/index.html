@@ -1895,6 +1895,16 @@
 
     function closeModal(id) { document.getElementById(id).style.display = 'none'; }
 
+    // RONDE 9: tanggal valid format yyyy-MM-dd (kalender nyata, bukan
+    // sekadar pola). Dipakai jaring pengaman submitTask untuk baris overdue.
+    function sibacotIsYmd(str) {
+      if (typeof str !== "string") return false;
+      const m = str.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (!m) return false;
+      const d = new Date(+m[1], +m[2] - 1, +m[3]);
+      return d.getFullYear() === +m[1] && d.getMonth() === +m[2] - 1 && d.getDate() === +m[3];
+    }
+
     async function submitTask() {
       const idTask = document.getElementById('inIdTask').value;
       const btn = document.getElementById('saveBtn');
@@ -1904,10 +1914,13 @@
       // menyembunyikan input deadline (tipe Harian -> hidden "-"), sehingga
       // simpan tanpa ubah mengirim "-" dan menimpa tanggal asli. Kirim
       // deadline asli dari data yang sedang diedit bila nilainya "-" / kosong.
+      // RONDE 9: guard lama hanya menahan kosong/"-"; angka mentah (mis. "31"
+      // dari input number 1-31) lolos dan menimpa tanggal asli. Sekarang bila
+      // nilainya bukan tanggal yyyy-MM-dd yang valid, pakai Deadline lama.
       // Backend juga menjaga hal yang sama sebagai pertahanan kedua.
       let deadlineVal = document.getElementById('inDeadline').value;
       const editingTask = idTask ? globalTasks.find(x => x.ID_Task === idTask) : null;
-      if (editingTask && editingTask.Is_Overdue && (!deadlineVal || deadlineVal === "-")) deadlineVal = editingTask.Deadline;
+      if (editingTask && editingTask.Is_Overdue && (!deadlineVal || deadlineVal === "-" || !sibacotIsYmd(deadlineVal))) deadlineVal = editingTask.Deadline;
       const res = await callAPI({
         action: idTask !== "" ? "editTask" : "addTask",
         ID_Task: idTask,
@@ -1935,7 +1948,23 @@
       document.getElementById('inDeskripsi').value = t.Deskripsi;
       document.getElementById('inTipe').value = t.Tipe;
       handleTipeChange();
-      document.getElementById('inDeadline').value = t.Deadline;
+      // RONDE 9: baris overdue menyimpan Deadline sebagai tanggal yyyy-MM-dd,
+      // sedangkan input Deadline untuk Bulanan/Triwulan/Semester/Tahunan adalah
+      // number 1-31 yang tidak bisa menampilkan tanggal itu — kolom tampak
+      // kosong, lalu admin mengetik angka dan tanggal asli tertimpa angka
+      // mentah (terbukti: "31" dan "15" di 2 baris Bulanan, 9 Nov 2026).
+      // Untuk baris overdue, pakai input tanggal apa pun Tipe-nya, dan isi
+      // ulang Tgl_Mulai/Progress supaya tidak ikut terhapus saat simpan
+      // (form hanya mengisinya untuk Tipe Tambahan).
+      if (t.Is_Overdue) {
+        document.getElementById('deadlineWrapper').style.display = "block";
+        document.getElementById('deadlineInputContainer').innerHTML = `<input type="date" id="inDeadline" required>`;
+        document.getElementById('inDeadline').value = t.Deadline;
+        document.getElementById('inTglMulai').value = (t.Tgl_Mulai && t.Tgl_Mulai !== "-") ? t.Tgl_Mulai : "";
+        document.getElementById('inProgress').value = t.Progress || "";
+      } else {
+        document.getElementById('inDeadline').value = t.Deadline;
+      }
       document.getElementById('inPIC').value = t.PIC;
       if (t.Tipe === "Tambahan") {
         document.getElementById('inTglMulai').value = t.Tgl_Mulai;
